@@ -85,18 +85,20 @@ def main():
         # No wallpaper is applied: the synthetic config has windows_wallpaper=False.
         result=subprocess.run([str(installed/'Uninstall.exe'),'/S'],timeout=180)
         assert result.returncode==0
+        def registered():
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER,uninstall_key):
+                    return True
+            except FileNotFoundError:
+                return False
         deadline=time.monotonic()+45
-        while gui.exists() and time.monotonic()<deadline:
+        # NSIS's outer process exits before its temporary uninstaller completes.
+        # Application files disappear before registry and shortcut cleanup finish.
+        while (gui.exists() or registered()) and time.monotonic()<deadline:
             time.sleep(.2)
         assert not gui.exists(), 'Installed executable remained after uninstall'
+        assert not registered(), 'Uninstall entry remained'
         assert config.is_file() and photo.is_file() and marker.is_file()
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Uninstall') as key_handle:
-            try:
-                winreg.OpenKey(key_handle,'GooglePhotoWallpaper')
-            except FileNotFoundError:
-                pass
-            else:
-                raise AssertionError('Uninstall entry remained')
         print('Installer integration passed: isolated per-user paths, Unicode, bundled driver, jobs, startup and data-preserving uninstall.')
 
 
