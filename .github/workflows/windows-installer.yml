@@ -22,7 +22,7 @@ jobs:
           SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
           SIGNPATH_POLICY_SLUG: ${{ vars.SIGNPATH_POLICY_SLUG }}
         run: |
-          if ('${{ github.repository }}' -ne 'dctian/google-photo-wallpaper' -or '${{ github.ref }}' -ne 'refs/heads/main') { throw 'Production signing is restricted to the upstream main branch.' }
+          if ($env:GITHUB_REPOSITORY -ne 'dctian/google-photo-wallpaper' -or $env:GITHUB_REF -ne 'refs/heads/main') { throw 'Production signing is restricted to the upstream main branch.' }
           foreach ($key in 'SIGNPATH_API_TOKEN','SIGNPATH_ORGANIZATION_ID','SIGNPATH_PROJECT_SLUG','SIGNPATH_POLICY_SLUG') {
             if (-not [Environment]::GetEnvironmentVariable($key)) { throw "Configure $key after SignPath approval." }
           }
@@ -48,6 +48,7 @@ jobs:
         id: version
         run: |
           $version = python -c "from photo_cache import __version__; print(__version__)"
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid application version.' }
           "value=$version" >> $env:GITHUB_OUTPUT
       - name: Upload application signing input
         if: ${{ inputs.sign }}
