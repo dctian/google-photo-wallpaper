@@ -5,6 +5,9 @@ import json
 import shutil
 import sys
 from PIL import Image, ImageDraw
+from runtime_policy import require_release_runtime
+
+require_release_runtime()
 
 root = Path(__file__).resolve().parent.parent
 target = root/'build'/'runtime-licenses'

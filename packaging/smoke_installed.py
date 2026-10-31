@@ -74,8 +74,11 @@ def main():
         ps(scripts/'Install-WallpaperTask.ps1','-ConfigPath',str(config))
         ps(scripts/'Install-Startup.ps1','-ConfigPath',str(config))
         output=run(['powershell.exe','-NoProfile','-Command',
-            "Get-ScheduledTask -TaskName GooglePhotosWallpaperRefresh,GooglePhotosWallpaperRotation | ForEach-Object { $_.Actions.Execute; $_.Actions.Arguments }"])
-        assert output.count(str(gui))==2 and output.count('--run-task')==2
+            "Get-ScheduledTask -TaskName GooglePhotosWallpaperRefresh,GooglePhotosWallpaperRotation | ForEach-Object { $_.Actions | Select-Object Execute,Arguments } | ConvertTo-Json"])
+        actions=json.loads(output)
+        assert len(actions)==2
+        assert all(Path(action['Execute']).resolve()==gui.resolve() and
+                   action['Arguments'].startswith('--run-task ') for action in actions)
         run([str(gui),'--run-task','--config',str(config),'--wallpaper-next'],env)
         log=config.parent/'.state'/'wallpaper.log'
         assert 'code 0' in log.read_text(encoding='utf-8')

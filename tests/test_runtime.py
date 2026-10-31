@@ -21,7 +21,8 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(sys,'frozen',True,create=True), \
                 patch.object(sys,'executable',str(Path(folder)/'Programs'/'App'/'GooglePhotoWallpaper.exe')):
             self.assertEqual(runtime.default_config_path(),Path(folder)/'GooglePhotosWallpaper'/'config.json')
-            self.assertEqual(runtime.command(['refresh']),[str(Path(folder)/'Programs'/'App'/'GooglePhotoWallpaper-cli.exe'),'refresh'])
+            expected=(Path(folder)/'Programs'/'App'/'GooglePhotoWallpaper-cli.exe').resolve()
+            self.assertEqual(runtime.command(['refresh']),[str(expected),'refresh'])
 
     def test_resource_paths_and_source_commands_are_distinct_from_private_data(self):
         with patch.object(sys,'frozen',False,create=True):

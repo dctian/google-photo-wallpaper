@@ -2,10 +2,14 @@
 import os
 from pathlib import Path, PureWindowsPath
 import types
+import json
+from runtime_policy import supported_runtime
 from PyInstaller.archive.readers import ZlibArchiveReader
 
 project=Path(__file__).resolve().parent.parent
 bundle=project/'dist'/'GooglePhotoWallpaper'
+inventory=json.loads((bundle/'_internal/licenses/runtime/runtime-inventory.json').read_text(encoding='utf-8'))
+assert supported_runtime(tuple(map(int,inventory['python'].split('.')))), 'Bundled runtime is below the security baseline'
 expected_scripts={'App-Runtime.ps1','Install-Task.ps1','Install-WallpaperTask.ps1',
                   'Install-Startup.ps1','Remove-Task.ps1','Remove-Integration.ps1',
                   'Run-Refresh.ps1','run_hidden.pyw'}

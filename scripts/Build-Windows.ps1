@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location -LiteralPath $root
 try {
+    & $Python packaging/runtime_policy.py
+    if ($LASTEXITCODE -ne 0) { throw 'The Python runtime does not meet the release security baseline.' }
     & $Python -m pip check
     if ($LASTEXITCODE -ne 0) { throw 'Dependency consistency check failed.' }
     & $Python packaging/tray_source.py

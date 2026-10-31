@@ -1,9 +1,11 @@
 # PyInstaller uses one shared runtime for a GUI and a console worker.
 from pathlib import Path
 import importlib.util
+import runpy
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 project = Path(SPECPATH).parent
+runpy.run_path(str(project/'packaging'/'runtime_policy.py'),run_name='__main__')
 data, binaries, imports = collect_all('playwright')
 data += [(str(project/'LICENSE'), 'licenses'),
          (str(project/'THIRD_PARTY_NOTICES.md'), 'licenses'),
