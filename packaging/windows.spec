@@ -5,11 +5,14 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 project = Path(SPECPATH).parent
 data, binaries, imports = collect_all('playwright')
-data += [(str(project/'scripts'), 'scripts'),
-         (str(project/'LICENSE'), 'licenses'),
+data += [(str(project/'LICENSE'), 'licenses'),
          (str(project/'THIRD_PARTY_NOTICES.md'), 'licenses'),
          (str(project/'third_party'/'licenses'), 'licenses/dependencies'),
          (str(project/'build'/'runtime-licenses'), 'licenses/runtime')]
+for script in ('App-Runtime.ps1','Install-Task.ps1','Install-WallpaperTask.ps1',
+               'Install-Startup.ps1','Remove-Task.ps1','Remove-Integration.ps1',
+               'Run-Refresh.ps1','run_hidden.pyw'):
+    data.append((str(project/'scripts'/script),'scripts'))
 # LGPL: ship and load pystray as replaceable, unmodified Python source, outside
 # the PYZ archive. Its full matching source archive accompanies binary releases.
 tray = Path(importlib.util.find_spec('pystray').origin).parent
