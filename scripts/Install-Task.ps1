@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config.json'),
+    [string]$ConfigPath = '',
     [ValidatePattern('^[^\\/\r\n]{1,128}$')]
     [string]$TaskName = 'GooglePhotosWallpaperRefresh',
     [ValidateRange(1, 24)]
@@ -8,9 +8,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path $PSScriptRoot -Parent
-$pythonPath = Join-Path $projectRoot '.venv\Scripts\python.exe'
-$pythonWindowlessPath = Join-Path $projectRoot '.venv\Scripts\pythonw.exe'
+. (Join-Path $PSScriptRoot 'App-Runtime.ps1')
+$runtime = Get-AppRuntime
+if (-not $ConfigPath) { $ConfigPath = $runtime.Config }
+$projectRoot = $runtime.Root
+$pythonPath = $runtime.Console
+$pythonWindowlessPath = $runtime.Windowless
 $launcherPath = Join-Path $PSScriptRoot 'run_hidden.pyw'
 
 foreach ($requiredFile in @($pythonPath, $pythonWindowlessPath, $launcherPath, $ConfigPath)) {
@@ -29,7 +32,8 @@ foreach ($argumentPath in @($resolvedConfig, $launcherPath)) {
 # It does not trigger a cloud download or rewrite the last successful refresh.
 Push-Location -LiteralPath $projectRoot
 try {
-    & $pythonPath -m photo_cache --config $resolvedConfig status --require-schedulable
+    $moduleArgs = $runtime.ModuleArgs
+    & $pythonPath @moduleArgs --config $resolvedConfig status --require-schedulable
     if ($LASTEXITCODE -ne 0) {
         throw 'Choose albums, sign in, and prepare a valid local collection before installing the scheduled task.'
     }
@@ -49,7 +53,7 @@ $principal = New-ScheduledTaskPrincipal -UserId $currentUserSid -LogonType Inter
 $triggerTime = (Get-Date).AddHours($IntervalHours)
 # An omitted repetition duration means repeat indefinitely, without an expiry date.
 $trigger = New-ScheduledTaskTrigger -Once -At $triggerTime -RepetitionInterval (New-TimeSpan -Hours $IntervalHours)
-$actionArguments = '"' + $launcherPath + '" --config "' + $resolvedConfig + '"'
+$actionArguments = $runtime.ScheduledPrefix + '--config "' + $resolvedConfig + '"'
 $action = New-ScheduledTaskAction -Execute $pythonWindowlessPath -Argument $actionArguments -WorkingDirectory $projectRoot
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)

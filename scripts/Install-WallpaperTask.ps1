@@ -1,10 +1,13 @@
 [CmdletBinding(SupportsShouldProcess)]
-param([string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config.json'))
+param([string]$ConfigPath = '')
 $ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'App-Runtime.ps1')
+$runtime = Get-AppRuntime
+if (-not $ConfigPath) { $ConfigPath = $runtime.Config }
+$projectRoot = $runtime.Root
 $resolvedConfig = (Resolve-Path -LiteralPath $ConfigPath).Path
 $launcher = Join-Path $PSScriptRoot 'run_hidden.pyw'
-$python = Join-Path $projectRoot '.venv\Scripts\pythonw.exe'
+$python = $runtime.Windowless
 foreach ($path in @($resolvedConfig, $launcher, $python)) {
     if ($path -match '["\r\n]' -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw 'The wallpaper task requires valid installed application paths.'
@@ -22,7 +25,7 @@ if ($existing -and $existing.Description -ne $description) { throw 'The wallpape
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Limited
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes($interval) -RepetitionInterval (New-TimeSpan -Minutes $interval)
-$arguments = '"' + $launcher + '" --config "' + $resolvedConfig + '" --wallpaper-next'
+$arguments = $runtime.ScheduledPrefix + '--config "' + $resolvedConfig + '" --wallpaper-next'
 $action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $projectRoot
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
 if ($PSCmdlet.ShouldProcess($taskName, 'Install synchronized wallpaper rotation')) {

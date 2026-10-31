@@ -1,11 +1,13 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config.json'),
+    [string]$ConfigPath = '',
     [ValidatePattern('^[^\\/\r\n]{1,128}$')]
     [string]$TaskName = 'GooglePhotosWallpaperRefresh'
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'App-Runtime.ps1')
+if (-not $ConfigPath) { $ConfigPath = (Get-AppRuntime).Config }
 $existingTask = Get-ScheduledTask -TaskName $TaskName -TaskPath '\' -ErrorAction SilentlyContinue
 if (-not $existingTask) {
     Write-Output "No task named $TaskName is installed."

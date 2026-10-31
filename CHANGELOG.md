@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 - 2026-10-31
+
+
+- Add a Windows x64 installer with a bundled Python runtime and per-user paths.
+- Add optional Ko-fi support links and coffee/lunch/dinner suggestions.
+- Preserve failure exit codes after exhausting the hourly download allowance.
+- Use UTF-8 for redirected CLI output and scheduled refresh jobs.
+- Isolate generated wallpaper sets belonging to sibling photo caches.
+- Retain source setup, privacy boundaries, and the rolling hourly download limit.
+
 ## 0.1.0 - 2026-10-31
 
 Initial Windows source release.

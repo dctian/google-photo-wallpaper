@@ -10,11 +10,31 @@ from PIL import Image
 
 from photo_cache.cache import Cache
 from photo_cache.config import Config, default_data, load_config, ConfigError
-from photo_cache.wallpapers import compose, generate_wallpapers, rotate_wallpaper
+from photo_cache.wallpapers import compose, generate_wallpapers, rotate_wallpaper, wallpaper_dir
 from photo_cache.windows_wallpaper import WallpaperError
 
 
 class WallpaperTests(unittest.TestCase):
+    def test_sibling_cache_cannot_replace_another_caches_active_wallpaper(self):
+        from dataclasses import replace
+        a = replace(self.config, windows_wallpaper=True)
+        b = replace(a, cache_dir=self.root/'cache-b', profile_dir=self.root/'browser-b')
+        other = Cache(b)
+        other.open()
+        key = 'b'*64
+        path = other.photos/(key+'.jpg')
+        Image.new('RGB', (40, 30), 'blue').save(path)
+        other.state['items'][key] = {'version':'1', 'selected':0.0, 'bytes':path.stat().st_size}
+        other.save()
+        with patch('photo_cache.wallpapers.set_wallpaper_all') as setter:
+            first = generate_wallpapers(a, apply=True, size=(640,480), report=lambda _:None)
+            second = generate_wallpapers(b, apply=True, size=(640,480), report=lambda _:None)
+            rotate_wallpaper(a, report=lambda _:None)
+        self.assertNotEqual(wallpaper_dir(a), wallpaper_dir(b))
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+        self.assertEqual(setter.call_args.args[0].parent, first)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)

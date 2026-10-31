@@ -1,11 +1,14 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config.json')
+    [string]$ConfigPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path $PSScriptRoot -Parent
-$pythonPath = Join-Path $projectRoot '.venv\Scripts\python.exe'
+. (Join-Path $PSScriptRoot 'App-Runtime.ps1')
+$runtime = Get-AppRuntime
+if (-not $ConfigPath) { $ConfigPath = $runtime.Config }
+$projectRoot = $runtime.Root
+$pythonPath = $runtime.Console
 
 try {
     if (-not (Test-Path -LiteralPath $pythonPath -PathType Leaf)) {
@@ -17,7 +20,8 @@ try {
     $resolvedConfig = (Resolve-Path -LiteralPath $ConfigPath).Path
     Push-Location -LiteralPath $projectRoot
     try {
-        & $pythonPath -m photo_cache --config $resolvedConfig refresh
+        $moduleArgs = $runtime.ModuleArgs
+        & $pythonPath @moduleArgs --config $resolvedConfig refresh
         $refreshExitCode = $LASTEXITCODE
     }
     finally {

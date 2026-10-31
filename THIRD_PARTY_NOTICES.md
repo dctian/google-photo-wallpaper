@@ -1,7 +1,11 @@
 # Third-party notices
 
 The application source is MIT-licensed. Third-party dependencies retain their own licenses.
-This source release does not bundle Python, Chrome, dependency wheels, or a frozen executable. Setup installs dependencies separately.
+Source setup installs dependencies separately. Windows installer releases bundle
+Python, Tcl/Tk, application dependencies, and the Playwright Node driver. Chrome
+and JBS are not bundled. The installed `_internal/licenses` directory contains
+the runtime inventory and notices, with additional upstream notices retained in
+package metadata and the Playwright driver directory.
 The following inventory describes the pinned, tested Windows dependency set; copied upstream license texts are under `third_party/licenses/`.
 
 | Package | Version | License | Notices |
@@ -25,8 +29,26 @@ The following inventory describes the pinned, tested Windows dependency set; cop
 
 `gpwc` provides two read-only request payload schemas and is pinned to commit `651aa268d50529cb6128c8a42c9cd4ce668f2189` of [google_photos_web_client](https://github.com/xob0t/google_photos_web_client). Its MIT notice is retained.
 
-`pystray` is LGPLv3. Keep its GPL/LGPL notices and comply with its library-source and replacement/relinking requirements if distributing a bundled executable. Importing this dependency does not relicense our original application source. This release distributes source and installs the library separately.
+`pystray` is LGPLv3-or-later. Installed builds load its unmodified `.py` files from
+`_internal/pystray`, outside the frozen Python archive. Users may replace that
+directory with a compatible modified library and debug those modifications.
+Every binary release also includes its full matching `pystray-0.19.5.tar.gz`
+source archive. GPL/LGPL notices are retained. Our original code remains MIT.
 
 `certifi` includes MPL-2.0-covered certificate data. Retain its notices and source-availability information when redistributing covered files. Other dependencies may include additional third-party notices within their distributions, especially native libraries and browser tooling.
 
-Future frozen binaries need a separate audit of every bundled library and runtime. Chrome and JBS are not redistributed. No code is copied from JBS. The authentication design was informed by [notebooklm-py](https://github.com/teng-lin/notebooklm-py); it is not an application dependency.
+Python's PSF license and bundled-component notices, Tcl/Tk license terms, and an
+exact Python/package version inventory accompany each installer. The Playwright
+driver retains its Node `LICENSE`, package `LICENSE`, `NOTICE`, and
+`ThirdPartyNotices.txt`. The installer is built with NSIS under its licenses,
+including the LZMA linking exception. PyInstaller's bootloader distribution
+exception permits the application's existing license. Build tools are unmodified.
+
+Source availability: the version inventory identifies the exact packages. Their
+matching source distributions are available from [PyPI](https://pypi.org/), with
+`gpwc` pinned to the commit linked above. Python source is available from
+[python.org](https://www.python.org/downloads/source/), and the unmodified
+certificate bundle covered by MPL-2.0 is retained in `_internal/certifi`.
+
+No code is copied from JBS. The authentication design was informed by
+[notebooklm-py](https://github.com/teng-lin/notebooklm-py); it is not a dependency.

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import webbrowser
 from datetime import datetime
 from typing import Callable
 import tkinter as tk
@@ -20,9 +21,12 @@ from .cache import CacheError, file_lock
 from .config import ConfigError, default_data, load_config
 from .source import GooglePhotosSource, SourceError, login
 from .tray import TrayIcon
+from .wallpapers import wallpaper_dir
+from .runtime import resource_dir, command as app_command
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = resource_dir()
+SUPPORT_URL = "https://ko-fi.com/davidtian"
 
 
 def _safe_output(text: str) -> str:
@@ -220,7 +224,7 @@ class WallpaperApp:
         self._button(wall_actions, "Open wallpapers", self._open_wallpaper_folder).pack(side="left")
         ttk.Label(wallpaper, text="Apply rebuilds the wallpaper set and updates the rotation interval.\nRefresh switches to another prepared collage immediately, using the saved settings.",
                   style="Hint.TLabel", wraplength=760).grid(row=4, column=0, sticky="w")
-        ttk.Label(wallpaper, text=str(self.config.cache_dir.parent / "wallpapers"), style="Hint.TLabel", wraplength=760).grid(row=5, column=0, sticky="w", pady=(15, 0))
+        ttk.Label(wallpaper, text=str(wallpaper_dir(self.config)), style="Hint.TLabel", wraplength=760).grid(row=5, column=0, sticky="w", pady=(15, 0))
         ttk.Label(wallpaper, text="Pause other wallpaper apps such as JBS when using this mode.",
                   style="Hint.TLabel").grid(row=6, column=0, sticky="w", pady=(15, 0))
 
@@ -230,6 +234,25 @@ class WallpaperApp:
         status_label = ttk.Label(outer, textvariable=self.status, wraplength=850)
         status_label.grid(row=4, column=0, sticky="ew")
         outer.bind("<Configure>", lambda event: status_label.configure(wraplength=max(300, event.width-40)))
+        support = ttk.Frame(outer)
+        support.grid(row=5, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(support, text="Free and open source. Optional support keeps it growing.", style="Hint.TLabel").pack(side="left")
+        ttk.Button(support, text="Support this project ☕", command=self._support).pack(side="right")
+
+    def _support(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Support this project")
+        dialog.transient(self.root)
+        panel = ttk.Frame(dialog, padding=24)
+        panel.pack(fill="both", expand=True)
+        ttk.Label(panel, text="Enjoying Google Photos Wallpaper?", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        ttk.Label(panel, text="Coffee $5   ·   Lunch $15   ·   Dinner $25", padding=(0, 16)).pack(anchor="w")
+        ttk.Label(panel, text="These are playful suggestions for optional tips.\nKo-fi displays larger amounts as more coffees.\nAll app features are free, with or without support.").pack(anchor="w")
+        ttk.Button(panel, text="Open Ko-fi", command=lambda: webbrowser.open(SUPPORT_URL)).pack(side="left", pady=(20, 0))
+        ttk.Button(panel, text="Close", command=dialog.destroy).pack(side="right", pady=(20, 0))
+
+    def _command(self, *arguments: str) -> list[str]:
+        return app_command(list(arguments), python=self._python())
 
     def _button(self, parent, label: str, action: Callable) -> ttk.Button:
         button = ttk.Button(parent, text=label, command=action)
@@ -509,7 +532,7 @@ class WallpaperApp:
         if not self._save_wallpaper_settings():
             return
         self._start("Generating wallpapers from local photos; this can take a few minutes…", lambda: self._run_process(
-            [self._python(), "-m", "photo_cache", "--config", str(self.config_path), "wallpapers", "--enable"],
+            self._command("--config", str(self.config_path), "wallpapers", "--enable"),
             "Wallpaper settings applied. Both monitors will change together."))
 
     def _refresh_wallpaper(self) -> None:
@@ -520,12 +543,12 @@ class WallpaperApp:
             if not load_config(self.config_path).windows_wallpaper:
                 raise CacheError("Apply wallpaper settings first to prepare and enable your wallpaper set.")
             return self._run_process(
-                [self._python(), "-m", "photo_cache", "--config", str(self.config_path), "wallpaper-next"],
+                self._command("--config", str(self.config_path), "wallpaper-next"),
                 "Wallpaper refreshed on both monitors.")
         self._start("Refreshing wallpaper from the prepared local set…", work)
 
     def _open_wallpaper_folder(self) -> None:
-        folder = self.config.cache_dir.parent / "wallpapers"
+        folder = wallpaper_dir(self.config)
         if folder.is_dir():
             os.startfile(folder)
         else:
@@ -539,7 +562,7 @@ class WallpaperApp:
             messagebox.showinfo("Choose albums", "Sign in, load your albums, and save a selection first.", parent=self.root)
             return
         self._start("Preparing fresh wallpapers…", lambda: self._run_process(
-            [self._python(), "-m", "photo_cache", "--config", str(self.config_path), "refresh"],
+            self._command("--config", str(self.config_path), "refresh"),
             "Photo download finished. Your local collection is ready."))
 
     def _enable_schedule(self) -> None:

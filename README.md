@@ -33,9 +33,26 @@ can change without notice. Use is subject to Google's applicable terms; the
 
 ## Install on Windows
 
-Version 0.1.0 is an early **source release**, not a bundled executable.
-Requires Windows 10/11, Python 3.12 or later with Tkinter, and installed Google
-Chrome. Edge can be selected with `browser_channel: "msedge"` in the configuration.
+For Windows 10/11 on x64, download **`google-photo-wallpaper-0.2.0-windows-x64-setup.exe`**
+from [Releases](https://github.com/dctian/google-photo-wallpaper/releases/latest).
+Run it, then open **Google Photos Wallpaper** from the Start menu. Python and the
+required libraries are included; no terminal or setup script is needed.
+
+The installer runs for your current user without administrator rights, under
+`%LOCALAPPDATA%\Programs\GooglePhotoWallpaper`. Private configuration lives in
+`%LOCALAPPDATA%\GooglePhotosWallpaper\config.json`. Installed Chrome is required;
+Edge can be selected with `browser_channel: "msedge"` in that configuration.
+Complete Google sign-in yourself, choose albums, download the first small batch,
+then enable hourly downloads and configure Wallpaper in the app.
+
+This early installer is unsigned. The GitHub release includes SHA-256 checksums,
+source, dependency notices, and the matching LGPL tray-library source. Uninstall
+through Windows' installed-apps list; private configuration, photos and browser
+data are preserved. Close the app before upgrading or uninstalling.
+
+### Run from source
+
+Source setup requires Python 3.12 or later with Tkinter and installed Chrome.
 
 1. Install Python from [python.org](https://www.python.org/downloads/windows/),
    including the option to add Python to PATH. Install Chrome if needed.
@@ -105,6 +122,8 @@ Default paths are private to the current Windows user:
 You can change paths and advanced options in private `config.json`; see
 [config.example.json](config.example.json). Existing installations retain their
 saved locations. Keep the browser profile and photo cache in separate folders.
+Custom cache directories use separate wallpaper output folders; the app displays
+the resolved folder in the Wallpaper tab. No developer-machine paths are defaults.
 
 Up to **20 wallpapers are active**, with the previous set retained during turnover:
 up to 40 generated JPEGs, bounded to approximately **64 MiB** across two successful
@@ -154,4 +173,11 @@ unredacted logs to public issues.
 
 Our original code is licensed under [MIT](LICENSE). Dependencies retain their own
 licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Chrome and JBS are not
-included. Bundled executables would require a separate dependency/license review.
+included. Installed builds retain runtime licenses and ship the LGPL tray library
+as replaceable source. See [Windows build instructions](docs/building-windows.md).
+
+## Support
+
+All features are free. If you enjoy the app, [support the project on Ko-fi](https://ko-fi.com/davidtian).
+Coffee **$5**, lunch **$15**, or dinner **$25** are playful suggestions for optional
+tips. Ko-fi represents larger amounts as more coffees. Support is never required.

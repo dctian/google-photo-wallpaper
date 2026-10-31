@@ -1,0 +1,32 @@
+# PyInstaller uses one shared runtime for a GUI and a console worker.
+from pathlib import Path
+import importlib.util
+from PyInstaller.utils.hooks import collect_all, copy_metadata
+
+project = Path(SPECPATH).parent
+data, binaries, imports = collect_all('playwright')
+data += [(str(project/'scripts'), 'scripts'),
+         (str(project/'LICENSE'), 'licenses'),
+         (str(project/'THIRD_PARTY_NOTICES.md'), 'licenses'),
+         (str(project/'third_party'/'licenses'), 'licenses/dependencies'),
+         (str(project/'build'/'runtime-licenses'), 'licenses/runtime')]
+# LGPL: ship and load pystray as replaceable, unmodified Python source, outside
+# the PYZ archive. Its full matching source archive accompanies binary releases.
+tray = Path(importlib.util.find_spec('pystray').origin).parent
+for source in tray.rglob('*.py'):
+    data.append((str(source), str(Path('pystray')/source.relative_to(tray).parent)))
+for package in ('pystray','pillow','playwright','gpwc','six','certifi','requests',
+                'pyee','greenlet','lxml','idna','charset-normalizer','urllib3','typing_extensions'):
+    data += copy_metadata(package)
+a = Analysis([str(project/'packaging'/'entry.py')], pathex=[str(project)],
+             binaries=binaries, datas=data,
+             hiddenimports=imports+['photo_cache.__main__','photo_cache.gui','six','six.moves.queue','ctypes.wintypes'],
+             excludes=['pystray','pytest','unittest','pip','setuptools'],
+             noarchive=False, optimize=0)
+pyz = PYZ(a.pure)
+gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name='GooglePhotoWallpaper',
+          console=False, debug=False, upx=False, icon=str(project/'build'/'app.ico'))
+cli = EXE(pyz, a.scripts, [], exclude_binaries=True, name='GooglePhotoWallpaper-cli',
+          console=True, debug=False, upx=False, icon=str(project/'build'/'app.ico'))
+app = COLLECT(gui, cli, a.binaries, a.datas, strip=False, upx=False,
+              name='GooglePhotoWallpaper')

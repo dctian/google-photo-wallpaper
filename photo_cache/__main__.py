@@ -12,6 +12,7 @@ from . import __version__
 from .cache import Cache, CacheError, file_lock, now, safe_path
 from .config import ConfigError, default_data, load_config
 from .source import GooglePhotosSource, SourceError, LoginRequired, login
+from .runtime import default_config_path, resource_dir
 
 
 def config_fingerprint(config) -> str:
@@ -95,9 +96,14 @@ def show_status(config, require_ready: bool, require_schedulable: bool = False) 
 
 
 def main(argv=None) -> int:
+    # Redirected Windows processes otherwise inherit a legacy code page. Paths
+    # and album titles can contain any Unicode character, including on first run.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     parser = argparse.ArgumentParser(description="Private Google Photos albums to a bounded local wallpaper collection")
     parser.add_argument("--version", action="version", version="google-photo-wallpaper " + __version__)
-    parser.add_argument("--config", type=Path, default=Path(__file__).resolve().parent.parent / "config.json")
+    parser.add_argument("--config", type=Path, default=default_config_path())
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init", help="Create a private local configuration")
     commands.add_parser("gui", help="Open the desktop album selector")
@@ -151,7 +157,7 @@ def main(argv=None) -> int:
                         data["windows_wallpaper"] = True
                         _write_config(config_path, data)
                 if args.enable:
-                    script = Path(__file__).resolve().parent.parent / "scripts" / "Install-WallpaperTask.ps1"
+                    script = resource_dir() / "scripts" / "Install-WallpaperTask.ps1"
                     task = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                         "-File", str(script), "-ConfigPath", str(config_path)],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -231,7 +237,7 @@ def main(argv=None) -> int:
                 if cache.state.get("last_error"):
                     print(cache.state["last_error"])
                 _refresh_wallpapers(config)
-                return 0 if result.deferred else (2 if result.failed or cache.state.get("last_error") else 0)
+                return 2 if result.failed or cache.state.get("last_error") else 0
     except FileExistsError:
         print("Configuration already exists; it was left unchanged.", file=sys.stderr)
         return 1

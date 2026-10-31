@@ -14,5 +14,8 @@ For installation on another Windows machine, follow
   mocked responses, not a real account.
 - Run `python -m unittest discover -s tests -q` with the project environment
   after code changes, and `python -m pip check` after dependency changes.
-- Keep third-party notices and licenses when updating dependencies. The current
-  release distributes source, not Python, Chrome, or frozen executables.
+- Keep third-party notices and licenses when updating dependencies. Installer
+  builds include a runtime inventory and bundled notices. Keep pystray as
+  replaceable source outside the frozen archive, with its matching source release.
+- Build only from the allowlisted source and dependencies. Never include local
+  configurations, browser data, photos, logs, or reports in an installer.

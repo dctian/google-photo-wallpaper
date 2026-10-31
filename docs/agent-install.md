@@ -1,5 +1,20 @@
 # Windows installation runbook for an AI assistant
 
+## Installer release (recommended for users)
+
+Download the x64 setup executable and checksums from the project's GitHub Release.
+Run the installer for the current Windows user, then open Google Photos Wallpaper
+from the Start menu. Python and application libraries are included. Do not run the
+source setup commands below for an installed build. The user still completes
+Google sign-in and album selection. Private configuration defaults to
+`%LOCALAPPDATA%\GooglePhotosWallpaper\config.json`; installer files live under
+`%LOCALAPPDATA%\Programs\GooglePhotoWallpaper`. No administrator rights are needed.
+Continue with the account, album, and wallpaper choices in sections 3–5 below;
+use the app's buttons to schedule jobs. See [building-windows.md](building-windows.md)
+for maintainer build and validation instructions.
+
+## Source setup
+
 Use a normal PowerShell session in the interactive user's Windows account. This
 source release needs Python 3.12+ with Tkinter and installed Chrome (or Edge).
 Setup is scriptable; the user must complete Google sign-in/MFA and decide which

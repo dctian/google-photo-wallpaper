@@ -7,8 +7,11 @@ from pathlib import Path
 import subprocess
 import sys
 from datetime import datetime, timezone
+if not getattr(sys, 'frozen', False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from photo_cache.runtime import frozen, application_dir, command as app_command
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = application_dir()
 LOG_LIMIT = 1024 * 1024
 
 
@@ -33,7 +36,8 @@ class BoundedLog:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     rotation = len(argv) == 3 and argv[2] == '--wallpaper-next'
-    log = BoundedLog(PROJECT_ROOT / '.state' / ('wallpaper.log' if rotation else 'task.log'))
+    log_root = Path(argv[1]).resolve().parent if frozen() and len(argv) >= 2 else PROJECT_ROOT
+    log = BoundedLog(log_root / '.state' / ('wallpaper.log' if rotation else 'task.log'))
     if len(argv) not in (2, 3) or argv[0] != '--config' or (len(argv) == 3 and argv[2] != '--wallpaper-next'):
         log.write(b'Launcher usage error: expected --config PATH.\n')
         return 2
@@ -44,11 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     log.write(f'\n[{started}] {command} started.\n'.encode('ascii'))
     try:
         with subprocess.Popen(
-            [str(python_path), '-m', 'photo_cache', '--config', str(config_path), command],
+            app_command(['--config', str(config_path), command], python=str(python_path)),
             cwd=PROJECT_ROOT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUNBUFFERED': '1'},
             creationflags=subprocess.CREATE_NO_WINDOW,
         ) as child:
             assert child.stdout is not None

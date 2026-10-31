@@ -42,6 +42,7 @@ class TaskLauncherTests(unittest.TestCase):
             self.assertEqual(popen.call_args.kwargs['creationflags'], launcher.subprocess.CREATE_NO_WINDOW)
             self.assertEqual(popen.call_args.kwargs['cwd'], root)
             self.assertEqual(popen.call_args.args[0][-1], 'refresh')
+            self.assertEqual(popen.call_args.kwargs['env']['PYTHONIOENCODING'], 'utf-8')
             logs = list((root / '.state').glob('task.log*'))
             self.assertEqual(len(logs), 2)
             self.assertTrue(all(path.stat().st_size <= launcher.LOG_LIMIT for path in logs))

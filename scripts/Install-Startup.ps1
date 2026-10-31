@@ -1,8 +1,11 @@
 [CmdletBinding(SupportsShouldProcess)]
-param([string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config.json'))
+param([string]$ConfigPath = '')
 $ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path $PSScriptRoot -Parent
-$python = Join-Path $projectRoot '.venv\Scripts\pythonw.exe'
+. (Join-Path $PSScriptRoot 'App-Runtime.ps1')
+$runtime = Get-AppRuntime
+if (-not $ConfigPath) { $ConfigPath = $runtime.Config }
+$projectRoot = $runtime.Root
+$python = $runtime.Windowless
 $config = (Resolve-Path -LiteralPath $ConfigPath).Path
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Run Setup.cmd first.' }
 if ($config -match '["\r\n]') { throw 'The configuration path is invalid.' }
@@ -10,7 +13,7 @@ $shortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'Google Phot
 if ($PSCmdlet.ShouldProcess($shortcutPath, 'Start the wallpaper app at Windows sign-in')) {
     $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $python
-    $shortcut.Arguments = '-m photo_cache --config "' + $config + '" gui'
+    $shortcut.Arguments = $runtime.GuiPrefix + '--config "' + $config + '" gui'
     $shortcut.WorkingDirectory = $projectRoot
     $shortcut.Description = 'Google Photos Wallpaper'
     $shortcut.Save()

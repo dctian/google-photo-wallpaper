@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import io
 from pathlib import Path
 import random
@@ -17,6 +18,15 @@ from .windows_wallpaper import WallpaperError, set_wallpaper_all, screen_size
 MARKER = "GooglePhotosWallpaper generated wallpapers v1\n"
 GENERATION = re.compile(r"generation-[a-f0-9]{32}")
 MAX_GENERATION_BYTES = 32 * 1024 * 1024
+
+
+def wallpaper_dir(config) -> Path:
+    """Keep the standard cache's existing location; isolate sibling caches."""
+    cache = config.cache_dir
+    if cache.name.casefold() == "cache":
+        return cache.parent / "wallpapers"
+    suffix = hashlib.sha256(cache.name.casefold().encode("utf-8")).hexdigest()[:20]
+    return cache.parent / ("wallpapers-" + suffix)
 
 
 def compose(paths: list[Path], size: tuple[int, int], layout: str) -> Image.Image:
@@ -58,7 +68,7 @@ def generate_wallpapers(config, *, apply: bool = False, report=print, size=None)
     paths = [cache.photos / f"{key}.jpg" for key in cache.state["items"]]
     if not paths:
         raise WallpaperError("Download some photos before generating wallpapers.")
-    root = config.cache_dir.parent / "wallpapers"
+    root = wallpaper_dir(config)
     safe_path(root)
     marker = root / ".owner"
     safe_path(marker)
@@ -158,7 +168,7 @@ def rotate_wallpaper(config, report=print) -> None:
     """Caller holds cache lock. Rotate an existing set without Google or rendering."""
     if not config.windows_wallpaper:
         return
-    root = config.cache_dir.parent / "wallpapers"
+    root = wallpaper_dir(config)
     safe_path(root)
     marker, current = root / ".owner", root / "current.json"
     for path in (marker, current):

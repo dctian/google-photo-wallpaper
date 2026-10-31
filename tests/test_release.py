@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from photo_cache.__main__ import main
 from photo_cache.config import default_data
+from photo_cache import __version__
 
 
 class ReleaseTests(unittest.TestCase):
@@ -23,7 +24,7 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as done:
                 main(['--version'])
         self.assertEqual(done.exception.code,0)
-        self.assertIn('google-photo-wallpaper 0.1.0',output.getvalue())
+        self.assertIn('google-photo-wallpaper '+__version__,output.getvalue())
         source.assert_not_called()
 
 

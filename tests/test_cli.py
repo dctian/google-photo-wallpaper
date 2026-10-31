@@ -11,12 +11,23 @@ from unittest.mock import patch
 from PIL import Image
 
 from photo_cache.__main__ import config_fingerprint, main, show_status
-from photo_cache.cache import Cache
+from photo_cache.cache import Cache, CacheError
 from photo_cache.config import default_data, load_config
 from photo_cache.source import LoginRequired, RemotePhoto, _PROFILE_MARKER
 
 
 class StatusTests(unittest.TestCase):
+    def test_failed_batch_is_a_failure_even_when_quota_is_exhausted(self):
+        with patch('photo_cache.__main__.GooglePhotosSource') as source, contextlib.redirect_stdout(io.StringIO()):
+            remote = source.return_value.__enter__.return_value
+            remote.list_photos.return_value = [RemotePhoto('new-'+str(i), '', 40, 30) for i in range(50)]
+            remote.download_photo.side_effect = CacheError('offline')
+            result = main(['--config', str(self.config_path), 'refresh'])
+        self.assertEqual(result, 2)
+        saved = json.loads(self.cache.state_file.read_text(encoding='utf-8'))
+        self.assertEqual(len(saved['download_attempts']), 50)
+        self.assertTrue(saved['last_error'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
