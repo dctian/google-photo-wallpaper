@@ -50,6 +50,13 @@ source, dependency notices, and the matching LGPL tray-library source. Uninstall
 through Windows' installed-apps list; private configuration, photos and browser
 data are preserved. Close the app before upgrading or uninstalling.
 
+### Code signing policy
+
+SignPath Foundation onboarding is being prepared; current releases are unsigned.
+See the [code signing policy](CODE_SIGNING_POLICY.md) for approval roles,
+build verification, and signing status, and the [privacy policy](PRIVACY.md) for
+network use and local data handling.
+
 ### Run from source
 
 Source setup requires Python 3.12 or later with Tkinter and installed Chrome.

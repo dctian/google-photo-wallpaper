@@ -24,6 +24,7 @@ VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "Google Photos Wallpaper"
 VIAddVersionKey "FileDescription" "Google Photos Wallpaper Setup"
 VIAddVersionKey "FileVersion" "${VERSION}"
+VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "David Tian"
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\GooglePhotoWallpaper.exe"

@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Python = 'python', [string]$NsisCompiler = '')
+param([string]$Python = 'python', [string]$NsisCompiler = '', [switch]$InstallerOnly)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location -LiteralPath $root
@@ -10,6 +10,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Dependency consistency check failed.' }
     & $Python packaging/tray_source.py
     if ($LASTEXITCODE -ne 0) { throw 'Matching tray library source verification failed.' }
+    if (-not $InstallerOnly) {
     & $Python packaging/prepare.py
     if ($LASTEXITCODE -ne 0) { throw 'Runtime notice preparation failed.' }
     & $Python -m PyInstaller --noconfirm packaging/windows.spec
@@ -18,14 +19,18 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Bundle privacy and source-replacement audit failed.' }
     & '.\dist\GooglePhotoWallpaper\GooglePhotoWallpaper-cli.exe' --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Bundled application self-test failed.' }
+    }
+    else {
+        & $Python packaging/audit_bundle.py
+        if ($LASTEXITCODE -ne 0) { throw 'Existing bundle failed its release audit.' }
+    }
     if (-not $NsisCompiler) {
         $tools = Join-Path $root '.state\tools'
         New-Item -ItemType Directory -Path $tools -Force | Out-Null
         $archive = Join-Path $tools 'nsis-3.13.zip'
         $expected = 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8'
-        if (-not (Test-Path -LiteralPath $archive)) {
-            Invoke-WebRequest -Uri 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip' -OutFile $archive
-        }
+        & $Python packaging/download_nsis.py
+        if ($LASTEXITCODE -ne 0) { throw 'Verified compiler download failed.' }
         if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'NSIS checksum mismatch.' }
         $NsisCompiler = Join-Path $tools 'nsis-3.13\makensis.exe'
         if (-not (Test-Path -LiteralPath $NsisCompiler)) { Expand-Archive -LiteralPath $archive -DestinationPath $tools }

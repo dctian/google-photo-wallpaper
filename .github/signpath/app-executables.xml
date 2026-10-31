@@ -1,0 +1,11 @@
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters><parameter name="version" required="true" /></parameters>
+  <zip-file>
+    <pe-file path="GooglePhotoWallpaper.exe" product-name="Google Photos Wallpaper" product-version="${version}" file-version="${version}" original-filename="GooglePhotoWallpaper.exe">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="GooglePhotoWallpaper-cli.exe" product-name="Google Photos Wallpaper" product-version="${version}" file-version="${version}" original-filename="GooglePhotoWallpaper-cli.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

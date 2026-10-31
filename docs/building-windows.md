@@ -4,6 +4,10 @@ Build on x64 Windows using a current supported Python, Tkinter, and a clean
 virtual environment. The release workflow uses Python 3.14.10 and verifies its
 runtime inventory. Chrome is installed by the user, never bundled.
 
+The build fails for runtimes below the reviewed security baseline: Python
+3.12.16, 3.13.18, 3.14.10, or 3.15.2. Later final patch releases in those branches
+are accepted. Review this policy when new security fixes become available.
+
 ```powershell
 python -m venv .state/build-venv
 .\.state\build-venv\Scripts\python.exe -m pip install -r requirements-build.txt
@@ -37,3 +41,33 @@ dependency licenses are retained in package metadata and copied notices.
 Publish the tested installer, the tagged source ZIP, `pystray-0.19.5.tar.gz`, and
 `SHA256SUMS.txt` as GitHub Release assets. The current build is unsigned; code
 signing requires a maintainer-controlled signing identity and is a separate step.
+
+## SignPath onboarding and production signing
+
+The [code signing policy](../CODE_SIGNING_POLICY.md) records current status and
+maintainer roles. The SignPath application is separate from account login; after
+approval the maintainer must complete account/MFA setup and authorize the
+SignPath GitHub App for this repository. No private key is handled by this project.
+
+Create a SignPath project linked to this public GitHub repository. Configure
+`app-executables` and `installer` from `.github/signpath/*.xml`, with a required
+`version` parameter, and a production signing policy with **manual approval**.
+Restrict source to the upstream `main` branch and GitHub-hosted runners. Use
+submitter-only API credentials. Store `SIGNPATH_API_TOKEN` as a GitHub Actions
+secret, and these nonsecret repository variables:
+
+- `SIGNPATH_ORGANIZATION_ID`
+- `SIGNPATH_PROJECT_SLUG`
+- `SIGNPATH_POLICY_SLUG`
+
+Run **Windows installer** with `sign` enabled only after approval and configuration.
+The workflow uploads only the two application executables for the first request,
+verifies their publisher and timestamps, rebuilds NSIS with those signed files,
+then separately submits and verifies the final installer. Upstream libraries keep
+their original signatures and licenses. An unsigned build never silently becomes
+a signed release; missing credentials or invalid signatures fail the signing path.
+
+The production path is prepared but cannot be exercised before SignPath approves
+the project and the maintainer approves actual signing requests. Verify the exact
+certificate subject at onboarding; `Verify-Signatures.ps1` expects the publisher
+`SignPath Foundation`. Generate release hashes only after final signing.

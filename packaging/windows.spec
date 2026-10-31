@@ -30,8 +30,10 @@ a = Analysis([str(project/'packaging'/'entry.py')], pathex=[str(project)],
              noarchive=False, optimize=0)
 pyz = PYZ(a.pure)
 gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name='GooglePhotoWallpaper',
+          version=str(project/'build'/'GooglePhotoWallpaper.version.txt'),
           console=False, debug=False, upx=False, icon=str(project/'build'/'app.ico'))
 cli = EXE(pyz, a.scripts, [], exclude_binaries=True, name='GooglePhotoWallpaper-cli',
+          version=str(project/'build'/'GooglePhotoWallpaper-cli.version.txt'),
           console=True, debug=False, upx=False, icon=str(project/'build'/'app.ico'))
 app = COLLECT(gui, cli, a.binaries, a.datas, strip=False, upx=False,
               name='GooglePhotoWallpaper')
