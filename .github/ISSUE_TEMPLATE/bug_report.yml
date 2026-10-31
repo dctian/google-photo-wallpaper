@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible problem without private account data.
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach cookies, browser profiles, private album links, personal photos, or unredacted logs. Report vulnerabilities privately.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the action, expected result, and actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Windows, Python, and app version
+  - type: textarea
+    id: error
+    attributes:
+      label: Redacted error message

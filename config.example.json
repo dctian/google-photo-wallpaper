@@ -1,0 +1,23 @@
+{
+  "cache_dir": "%LOCALAPPDATA%\\GooglePhotosWallpaper\\cache",
+  "profile_dir": "%LOCALAPPDATA%\\GooglePhotosWallpaper\\browser",
+  "albums": [],
+  "max_photos": 500,
+  "max_bytes": 1073741824,
+  "batch_size": 50,
+  "max_width": 3840,
+  "max_height": 2160,
+  "jpeg_quality": 88,
+  "max_download_bytes": 33554432,
+  "max_image_bytes": 8388608,
+  "browser_channel": "chrome",
+  "quality_filter": true,
+  "anniversary_fraction": 0.3,
+  "anniversary_window_days": 7,
+  "min_long_edge": 1600,
+  "min_short_edge": 720,
+  "windows_wallpaper": false,
+  "wallpaper_layout": "collage",
+  "wallpaper_interval_minutes": 10,
+  "wallpaper_photos_per_image": 20
+}
