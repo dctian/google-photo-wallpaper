@@ -1,7 +1,8 @@
 # Code signing policy
 
-Status: **SignPath Foundation onboarding is being prepared. No release currently
-claims a SignPath signature.** Existing unsigned releases are labeled as such.
+Status: **The SignPath Foundation application was submitted on October 31, 2026
+and is awaiting approval. No release currently claims a SignPath signature.**
+Existing unsigned releases are labeled as such.
 
 If the project is approved, the attribution will be: Free code signing provided
 by [SignPath.io](https://about.signpath.io/), certificate by

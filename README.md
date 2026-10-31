@@ -52,7 +52,8 @@ data are preserved. Close the app before upgrading or uninstalling.
 
 ### Code signing policy
 
-SignPath Foundation onboarding is being prepared; current releases are unsigned.
+The SignPath Foundation application was submitted on October 31, 2026 and is
+awaiting approval; current releases are unsigned.
 See the [code signing policy](CODE_SIGNING_POLICY.md) for approval roles,
 build verification, and signing status, and the [privacy policy](PRIVACY.md) for
 network use and local data handling.
