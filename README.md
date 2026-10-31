@@ -34,7 +34,7 @@ can change without notice. Use is subject to Google's applicable terms; the
 ## Install on Windows
 
 Version 0.1.0 is an early **source release**, not a bundled executable.
-Requires Windows 10/11, Python 3.11 or later with Tkinter, and installed Google
+Requires Windows 10/11, Python 3.12 or later with Tkinter, and installed Google
 Chrome. Edge can be selected with `browser_channel: "msedge"` in the configuration.
 
 1. Install Python from [python.org](https://www.python.org/downloads/windows/),

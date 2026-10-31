@@ -1,6 +1,6 @@
 # Contributing
 
-This is a Windows desktop application. Start with Python 3.11 or 3.13 and an
+This is a Windows desktop application. Start with Python 3.12 or 3.13 and an
 isolated environment:
 
 ```powershell

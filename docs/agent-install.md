@@ -1,7 +1,7 @@
 # Windows installation runbook for an AI assistant
 
 Use a normal PowerShell session in the interactive user's Windows account. This
-source release needs Python 3.11+ with Tkinter and installed Chrome (or Edge).
+source release needs Python 3.12+ with Tkinter and installed Chrome (or Edge).
 Setup is scriptable; the user must complete Google sign-in/MFA and decide which
 albums to use. Do not promise unattended authentication or permanent sessions.
 
@@ -12,7 +12,7 @@ working directory to the extracted project root, which contains `Setup.ps1`.
 Avoid temporary folders and `Program Files`. Verify prerequisites:
 
 ```powershell
-python -c "import sys, tkinter; print(sys.version); assert sys.version_info >= (3, 11)"
+python -c "import sys, tkinter; print(sys.version); assert sys.version_info >= (3, 12)"
 ```
 
 If Python or Chrome is missing, help the user install the official distribution.
