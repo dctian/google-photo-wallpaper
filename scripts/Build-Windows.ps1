@@ -12,6 +12,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Runtime notice preparation failed.' }
     & $Python -m PyInstaller --noconfirm packaging/windows.spec
     if ($LASTEXITCODE -ne 0) { throw 'Application bundle failed.' }
+    & $Python packaging/audit_bundle.py
+    if ($LASTEXITCODE -ne 0) { throw 'Bundle privacy and source-replacement audit failed.' }
     & '.\dist\GooglePhotoWallpaper\GooglePhotoWallpaper-cli.exe' --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Bundled application self-test failed.' }
     if (-not $NsisCompiler) {
