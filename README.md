@@ -29,7 +29,8 @@ can change without notice. Use is subject to Google's applicable terms; the
 - Configure photos per collage and wallpaper timing (defaults: 20 and 10 minutes).
 - Show the same complete image on every monitor, fitted separately, without spanning.
 - Refresh wallpaper from the app or its system-tray menu.
-- Separate **Photo downloader** and **Wallpaper** settings tabs.
+- One dashboard for download activity, your photo collection, and optional desktop
+  wallpaper. Focused settings dialogs keep the main window free of tabs and scrolling.
 
 ## Install on Windows
 
@@ -69,14 +70,22 @@ Source setup requires Python 3.12 or later with Tkinter and installed Chrome.
 3. Run **Setup.cmd**. It creates an isolated `.venv`, installs dependencies, and
    creates your private `config.json`. Internet access is required for setup.
 4. Open **Start-App.cmd**.
-5. On **Photo downloader**, click **Sign in to Google**. Sign in yourself in the
+5. Click **Sign in to Google**. Sign in yourself in the
    separate Chrome window. Once your Photos library appears, **close that browser
    window** so the app can verify and reuse the saved session.
-6. Load your albums, choose them, and **Save downloader settings**. Click
-   **Download photos now** for the first small batch, then **Enable hourly downloads**.
-7. On **Wallpaper**, choose a layout, photos per collage, and minutes between
-   changes. Click **Apply settings & generate**. Preparing the 4K set can take a
+6. Click **Choose albums**, select them, and **Save selection**. Click
+   **Download now** for the first small batch, then **Enable hourly downloads**.
+   The **Settings** button on Photo downloads opens download and storage preferences.
+7. For desktop changes, open **Settings** on the Desktop wallpaper card, choose
+   the collage size and interval, and save. Click **Turn wallpaper on**. Preparing the 4K set can take a
    few minutes. Pause JBS or other wallpaper programs to avoid competing updates.
+
+The app shows the **latest photo download** in your local time, even if a batch
+was interrupted. Google sign-in is checked when the app opens, after login, and
+during downloads. The displayed status includes when it was checked; **Check
+connection** verifies it again without downloading photos. If **Google Photos needs sign-in**
+appears, click **Sign in to Google** to reconnect. Status and download dates
+update automatically while the app is open, including changes from scheduled runs.
 
 For a PowerShell setup instead of the batch launcher:
 
@@ -92,6 +101,12 @@ and scheduling are scriptable; you complete Google sign-in and choose albums.
 
 ## Two independent jobs
 
+For downloads only, click **Turn wallpaper off** on the Desktop wallpaper card. This
+pauses the wallpaper rotation task and stops automatic collage generation after
+downloads. Photo downloads and your selected albums are unchanged. The existing
+desktop image stays in place, and the photo folder still works with JBS or other
+wallpaper apps. Click **Turn wallpaper on** to restore desktop changes.
+
 | Job | Default | What it does |
 | --- | --- | --- |
 | Photo downloader | Every hour | Reads selected albums and attempts up to the remaining hourly photo allowance |
@@ -102,9 +117,27 @@ window is closed. This does **not** depend on Windows' built-in wallpaper slides
 The app does not wake a sleeping computer. Missed download intervals never build
 up credit for a bulk download.
 
-Hourly runs renew the prepared collage set from local photos. **Refresh wallpaper**
+The downloader shows whether hourly downloads are **ON** or **OFF** and the next
+run reported by Windows. Turning downloads on again preserves an existing
+schedule and creates no duplicate jobs. **Pause hourly downloads** pauses
+future automatic runs; a running batch can finish and manual downloads still work.
+The activity display distinguishes connecting, reading albums, and downloading,
+with counts of photos added, skipped, and failed. During downloads the progress
+bar measures completed photo attempts, including skipped or failed photos. During
+other actions it animates without a percentage; it is hidden when idle. Updates
+from scheduled downloads appear within five seconds. If the hourly allowance is
+used, its reset time is shown separately from the next scheduled run.
+
+Click **Open logs** at the bottom of the app to inspect photo-download, wallpaper,
+and manual-action logs. The viewer shows timestamps in local time; **Reload**
+reads new entries and **Open log folder** opens the original files. Logs stay on
+your computer and retain at most two 1 MiB files per category. Temporary Windows
+file locks during cache-state updates are retried and recorded in these logs.
+
+When wallpaper is on, hourly runs renew the collage set from local photos. **Next wallpaper**
 switches immediately to another prepared image without contacting Google or saving
-pending settings. Use **Apply settings & generate** after changing collage settings.
+pending settings. The tray's **Refresh wallpaper** does the same thing. Saving
+wallpaper settings applies them immediately when wallpaper is on; it stays off otherwise.
 Minimize to the system tray; closing the app with **X** exits only the window.
 
 To open the app at Windows sign-in, run:
@@ -130,8 +163,8 @@ Default paths are private to the current Windows user:
 You can change paths and advanced options in private `config.json`; see
 [config.example.json](config.example.json). Existing installations retain their
 saved locations. Keep the browser profile and photo cache in separate folders.
-Custom cache directories use separate wallpaper output folders; the app displays
-the resolved folder in the Wallpaper tab. No developer-machine paths are defaults.
+Custom cache directories use separate wallpaper output folders; **Open wallpapers**
+in Wallpaper settings opens the resolved folder. No developer-machine paths are defaults.
 
 Up to **20 wallpapers are active**, with the previous set retained during turnover:
 up to 40 generated JPEGs, bounded to approximately **64 MiB** across two successful

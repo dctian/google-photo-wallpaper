@@ -81,6 +81,34 @@ class GuiSettingsTests(unittest.TestCase):
             app._refresh_wallpaper()
             app._start.assert_not_called()
 
+    def test_apply_settings_does_not_reenable_wallpaper_when_off(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app=self.make_app(folder)
+            data=json.loads(app.config_path.read_text())
+            data['windows_wallpaper']=False
+            _write_config(app.config_path,data)
+            app.config=load_config(app.config_path)
+            app._python=lambda:'python.exe'
+            app._run_process=Mock()
+            app._start=lambda label,work:work()
+            app._apply_wallpaper()
+            self.assertEqual(app._run_process.call_args.args[0][-1], 'wallpapers')
+            self.assertNotIn('--enable',app._run_process.call_args.args[0])
+            self.assertFalse(load_config(app.config_path).windows_wallpaper)
+
+    def test_toggle_off_does_not_save_unrelated_drafts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app=self.make_app(folder)
+            before=app.config_path.read_bytes()
+            app._python=lambda:'python.exe'
+            app._run_process=Mock()
+            app._start=lambda label,work:work()
+            app._toggle_wallpaper()
+            self.assertEqual(app._run_process.call_args.args[0][-2:], ['wallpapers','--disable'])
+            self.assertEqual(app.config_path.read_bytes(),before)
+            self.assertTrue(app.dirty)
+            self.assertTrue(app.wallpaper_dirty)
+
     def test_tray_refresh_routes_to_same_action_without_showing_window(self):
         app=object.__new__(WallpaperApp)
         app._refresh_wallpaper=Mock()
