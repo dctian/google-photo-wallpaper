@@ -12,17 +12,21 @@ import sys
 import tempfile
 import threading
 import webbrowser
-from datetime import datetime
 from typing import Callable
 import tkinter as tk
 from tkinter import messagebox, ttk
+from tkinter.scrolledtext import ScrolledText
 
-from .cache import CacheError, file_lock
+from .cache import Cache, CacheError, file_lock
 from .config import ConfigError, default_data, load_config
 from .source import GooglePhotosSource, SourceError, login
 from .tray import TrayIcon
 from .wallpapers import wallpaper_dir
 from .runtime import resource_dir, command as app_command
+from .connection_status import connection_text, latest_download, read_connection, local_date
+from .schedule import read_schedule, schedule_text, task_command
+from .download_status import ACTIVE_PHASES, activity_text
+from .logs import append_app_log, log_directory, read_log
 
 
 PROJECT_ROOT = resource_dir()
@@ -74,9 +78,16 @@ class WallpaperApp:
         self.selected_ids = {_album_id(url) for url in self.config.albums}
         self.buttons: list[ttk.Button] = []
         self.dirty = False
-        self.status = tk.StringVar(value="Manage photo downloads and wallpaper rotation in the tabs above.")
+        self.status = tk.StringVar(value="Ready.")
         self.selection = tk.StringVar(value=f"{len(self.config.albums)} saved albums")
         self.cache_status = tk.StringVar()
+        self.connection_status = tk.StringVar()
+        self.download_status = tk.StringVar(value='Idle · No photo download is running.')
+        self.schedule_status = tk.StringVar(value='Checking the Windows download schedule…')
+        self.wallpaper_feature_status = tk.StringVar()
+        self._schedule_data = {'state': 'unknown'}
+        self._schedule_query_running = False
+        self._schedule_poll_count = 0
         self.collection_hint = tk.StringVar()
         self.batch_size = tk.StringVar(value=str(self.config.batch_size))
         self.max_photos = tk.StringVar(value=str(self.config.max_photos))
@@ -95,149 +106,52 @@ class WallpaperApp:
         self.root.bind("<Unmap>", self._on_unmap, add="+")
         self.root.bind("<Destroy>", self._on_destroy, add="+")
         self.root.after(100, self._poll)
+        self.root.after(300, self._check_sign_in)
+        self.root.after(5000, self._watch_status)
+        self.root.after(100, self._query_schedule)
 
     def _build(self) -> None:
-        root = self.root
-        root.title("Google Photos Wallpaper")
-        root.geometry("960x820")
-        root.minsize(850, 700)
-        style = ttk.Style(root)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
-        style.configure("TLabel", font=("Segoe UI", 10))
-        style.configure("TButton", font=("Segoe UI", 10), padding=(10, 3))
-        style.configure("Title.TLabel", font=("Segoe UI", 21, "bold"))
-        style.configure("Subtitle.TLabel", foreground="#536171")
-        style.configure("Hint.TLabel", font=("Segoe UI", 9), foreground="#536171")
-        style.configure("Treeview", font=("Segoe UI", 10), rowheight=30)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
-        outer = ttk.Frame(root, padding=20)
-        outer.pack(fill="both", expand=True)
-        outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(1, weight=1)
-        ttk.Label(outer, text="Your albums, on your desktop", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 15))
-        notebook = ttk.Notebook(outer)
-        notebook.grid(row=1, column=0, sticky="nsew")
-        downloader = ttk.Frame(notebook, padding=12)
-        wallpaper = ttk.Frame(notebook, padding=18)
-        notebook.add(downloader, text="Photo downloader")
-        notebook.add(wallpaper, text="Wallpaper")
-        downloader.columnconfigure(0, weight=1)
-        downloader.rowconfigure(1, weight=1)
-        connection = ttk.Frame(downloader)
-        connection.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        self._button(connection, "1  Sign in to Google", self._sign_in).pack(side="left")
-        self._button(connection, "2  Load my albums", self._load_albums).pack(side="left", padx=(10, 0))
-        ttk.Label(connection, text="Private albums stay private", style="Subtitle.TLabel").pack(side="right")
+        from .dashboard import build
+        build(self)
 
-        albums_box = ttk.LabelFrame(downloader, text="Albums", padding=8)
-        albums_box.grid(row=1, column=0, sticky="nsew")
-        albums_box.columnconfigure(0, weight=1)
-        albums_box.rowconfigure(0, weight=1)
-        self.album_tree = ttk.Treeview(albums_box, columns=("chosen", "title", "count"), show="headings",
-                                       selectmode="none", height=9)
-        self.album_tree.heading("chosen", text="Use")
-        self.album_tree.heading("title", text="Album")
-        self.album_tree.heading("count", text="Items")
-        self.album_tree.column("chosen", width=50, anchor="center", stretch=False)
-        self.album_tree.column("title", width=600, anchor="w")
-        self.album_tree.column("count", width=80, anchor="e", stretch=False)
-        self.album_tree.grid(row=0, column=0, sticky="nsew")
-        scroll = ttk.Scrollbar(albums_box, orient="vertical", command=self.album_tree.yview)
-        scroll.grid(row=0, column=1, sticky="ns")
-        self.album_tree.configure(yscrollcommand=scroll.set)
-        self.album_tree.bind("<Button-1>", self._toggle_album)
-        self.album_tree.bind("<space>", self._toggle_keyboard)
-        footer = ttk.Frame(albums_box)
-        footer.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        ttk.Label(footer, textvariable=self.selection).pack(side="left")
-        self._button(footer, "Select all", lambda: self._select_all(True)).pack(side="right")
-        self._button(footer, "Clear", lambda: self._select_all(False)).pack(side="right", padx=(0, 8))
+    def _sync_dashboard(self) -> None:
+        from .dashboard import sync
+        sync(self)
 
-        settings = ttk.LabelFrame(downloader, text="Download & cache settings", padding=8)
-        settings.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        for col in (1, 3, 5):
-            settings.columnconfigure(col, weight=1)
-        ttk.Label(settings, text="Photo attempts per hour").grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(settings, textvariable=self.batch_size, from_=1, to=50, width=7,
-                    command=self._mark_dirty).grid(row=0, column=1, sticky="w", padx=(8, 20))
-        ttk.Label(settings, text="Keep up to").grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(settings, textvariable=self.max_photos, from_=1, to=10000, width=7,
-                    command=self._mark_dirty).grid(row=0, column=3, sticky="w", padx=(8, 20))
-        ttk.Label(settings, text="Disk limit (MiB)").grid(row=0, column=4, sticky="w")
-        ttk.Spinbox(settings, textvariable=self.cache_mib, from_=32, to=102400, width=8,
-                    command=self._mark_dirty).grid(row=0, column=5, sticky="w", padx=(8, 0))
-        ttk.Label(settings, text="Downloaded image size").grid(row=1, column=0, sticky="w", pady=(12, 0))
-        resolution = ttk.Combobox(settings, textvariable=self.resolution, state="readonly", width=18,
-                                  values=("1920 × 1080", "2560 × 1440", "3840 × 2160", "5120 × 2880", "7680 × 4320"))
-        resolution.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 20), pady=(12, 0))
-        resolution.bind("<<ComboboxSelected>>", lambda event: self._mark_dirty())
-        ttk.Label(settings, text="Aspect ratio is preserved; photos are never cropped.",
-                  style="Subtitle.TLabel").grid(row=1, column=3, columnspan=3, sticky="w", pady=(12, 0))
-        self.optional_settings = ttk.Frame(settings)
-        self.optional_settings.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(10, 0))
-        ttk.Checkbutton(self.optional_settings, text="Prefer higher resolution; skip near-duplicates",
-                        variable=self.quality_filter, command=self._mark_dirty).pack(anchor="w")
-        ttk.Checkbutton(self.optional_settings, text="Include this time of year from past years (30%, ±7 days)",
-                        variable=self.anniversaries, command=self._mark_dirty).pack(anchor="w", pady=(4, 0))
-        ttk.Label(self.optional_settings, text="Local date and image checks, not Google’s curation model.",
-                  style="Hint.TLabel").pack(anchor="w", pady=(4, 0))
-        ttk.Label(self.optional_settings, textvariable=self.collection_hint,
-                  style="Hint.TLabel").pack(anchor="w", pady=(2, 0))
-        for variable in (self.batch_size, self.max_photos, self.cache_mib):
-            variable.trace_add("write", lambda *_: self._mark_dirty())
-        actions = ttk.Frame(downloader)
-        actions.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-        self._button(actions, "Save downloader settings", self._save).pack(side="left")
-        self._button(actions, "Download photos now", self._refresh).pack(side="left", padx=8)
-        self._button(actions, "Enable hourly downloads", self._enable_schedule).pack(side="right")
-        info = ttk.Frame(downloader)
-        info.grid(row=4, column=0, sticky="ew", pady=(10, 0))
-        info.columnconfigure(0, weight=1)
-        ttk.Label(info, text=str(self.config.cache_dir / "photos"), style="Hint.TLabel", wraplength=650).grid(row=0, column=0, sticky="w")
-        self._button(info, "Open photos", self._open_folder).grid(row=0, column=1, padx=(10, 0))
-
-        wallpaper.columnconfigure(0, weight=1)
-        ttk.Label(wallpaper, text="Wallpaper generation & rotation", font=("Segoe UI", 15, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(wallpaper, text="Uses photos already on your laptop. Both monitors show the same image.",
-                  style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 20))
-        controls = ttk.LabelFrame(wallpaper, text="Wallpaper settings", padding=16)
-        controls.grid(row=2, column=0, sticky="ew")
-        ttk.Label(controls, text="Layout").grid(row=0, column=0, sticky="w", pady=8)
-        layout = ttk.Combobox(controls, textvariable=self.wallpaper_layout, state="readonly", values=("collage", "single"), width=18)
-        layout.grid(row=0, column=1, sticky="w", padx=20)
-        layout.bind("<<ComboboxSelected>>", lambda _: self._mark_wallpaper_dirty())
-        ttk.Label(controls, text="Photos per collage").grid(row=1, column=0, sticky="w", pady=8)
-        ttk.Spinbox(controls, textvariable=self.wallpaper_photos, from_=1, to=100, width=8,
-                    command=self._mark_wallpaper_dirty).grid(row=1, column=1, sticky="w", padx=20)
-        ttk.Label(controls, text="Change wallpaper every (minutes)").grid(row=2, column=0, sticky="w", pady=8)
-        ttk.Spinbox(controls, textvariable=self.wallpaper_minutes, from_=1, to=1440, width=8,
-                    command=self._mark_wallpaper_dirty).grid(row=2, column=1, sticky="w", padx=20)
-        for variable in (self.wallpaper_photos, self.wallpaper_minutes):
-            variable.trace_add("write", lambda *_: self._mark_wallpaper_dirty())
-        ttk.Label(controls, text="Scattered photo prints, varied angles and sizes, smooth white borders, and soft shadows.",
-                  style="Hint.TLabel", wraplength=720).grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
-        wall_actions = ttk.Frame(wallpaper)
-        wall_actions.grid(row=3, column=0, sticky="ew", pady=18)
-        self._button(wall_actions, "Apply settings & generate", self._apply_wallpaper).pack(side="left")
-        self._button(wall_actions, "Refresh wallpaper", self._refresh_wallpaper).pack(side="left", padx=10)
-        self._button(wall_actions, "Open wallpapers", self._open_wallpaper_folder).pack(side="left")
-        ttk.Label(wallpaper, text="Apply rebuilds the wallpaper set and updates the rotation interval.\nRefresh switches to another prepared collage immediately, using the saved settings.",
-                  style="Hint.TLabel", wraplength=760).grid(row=4, column=0, sticky="w")
-        ttk.Label(wallpaper, text=str(wallpaper_dir(self.config)), style="Hint.TLabel", wraplength=760).grid(row=5, column=0, sticky="w", pady=(15, 0))
-        ttk.Label(wallpaper, text="Pause other wallpaper apps such as JBS when using this mode.",
-                  style="Hint.TLabel").grid(row=6, column=0, sticky="w", pady=(15, 0))
-
-        ttk.Label(outer, textvariable=self.cache_status, style="Subtitle.TLabel").grid(row=2, column=0, sticky="w", pady=(10, 0))
-        self.progress = ttk.Progressbar(outer, mode="indeterminate")
-        self.progress.grid(row=3, column=0, sticky="ew", pady=(8, 6))
-        status_label = ttk.Label(outer, textvariable=self.status, wraplength=850)
-        status_label.grid(row=4, column=0, sticky="ew")
-        outer.bind("<Configure>", lambda event: status_label.configure(wraplength=max(300, event.width-40)))
-        support = ttk.Frame(outer)
-        support.grid(row=5, column=0, sticky="ew", pady=(10, 0))
-        ttk.Label(support, text="Free and open source. Optional support keeps it growing.", style="Hint.TLabel").pack(side="left")
-        ttk.Button(support, text="Support this project ☕", command=self._support).pack(side="right")
+    def _open_logs(self) -> None:
+        folder = log_directory(self.config_path)
+        dialog = tk.Toplevel(self.root)
+        dialog.title('Google Photos Wallpaper — Logs')
+        dialog.geometry('1000x650')
+        panel = ttk.Frame(dialog, padding=16)
+        panel.pack(fill='both', expand=True)
+        ttk.Label(panel, text='Local logs · Timestamps shown in local time · Latest entries at the bottom').pack(anchor='w', pady=(0, 10))
+        sources = {'Photo downloads': 'task.log', 'Wallpaper rotation': 'wallpaper.log',
+                   'App actions / manual downloads': 'app.log'}
+        source = tk.StringVar(value='Photo downloads')
+        selector = ttk.Combobox(panel, state='readonly', textvariable=source, values=tuple(sources), width=35)
+        selector.pack(anchor='w', pady=(0, 12))
+        text = ScrolledText(panel, wrap='word', font=('Consolas', 10))
+        text.pack(fill='both', expand=True)
+        def reload_logs():
+            text.configure(state='normal')
+            text.delete('1.0', 'end')
+            text.insert('1.0', read_log(folder, sources[source.get()]))
+            text.configure(state='disabled')
+            text.see('end')
+        selector.bind('<<ComboboxSelected>>', lambda _: reload_logs())
+        def open_folder():
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+                os.startfile(folder)
+            except OSError:
+                messagebox.showerror('Open logs', 'Could not open the log folder: ' + str(folder), parent=dialog)
+        actions = ttk.Frame(panel)
+        actions.pack(fill='x', pady=(10, 0))
+        ttk.Button(actions, text='Reload', command=reload_logs).pack(side='left')
+        ttk.Button(actions, text='Open log folder', command=open_folder).pack(side='left', padx=8)
+        ttk.Button(actions, text='Close', command=dialog.destroy).pack(side='right')
+        reload_logs()
 
     def _support(self) -> None:
         dialog = tk.Toplevel(self.root)
@@ -275,18 +189,25 @@ class WallpaperApp:
         if self.busy:
             return
         self.busy = True
+        append_app_log(self.config_path, label)
         self.status.set(label)
         for button in self.buttons:
             button.configure(state="disabled")
+        self.progress.configure(mode='indeterminate', value=0)
+        self.progress.grid()
         self.progress.start(12)
+        self._sync_dashboard()
 
         def run():
             try:
                 result = work()
+                append_app_log(self.config_path, 'Action completed.')
                 self.events.put(("done", result, finish))
             except (SourceError, ConfigError, CacheError) as exc:
+                append_app_log(self.config_path, 'Action failed: ' + _safe_output(str(exc)))
                 self.events.put(("error", str(exc), None))
             except Exception:
+                append_app_log(self.config_path, 'Action failed unexpectedly. Check local setup.')
                 self.events.put(("error", "This action could not finish. Check the local setup and try again.", None))
         threading.Thread(target=run, name="photo-wallpaper-action", daemon=True).start()
 
@@ -300,9 +221,17 @@ class WallpaperApp:
                     continue
                 if event == "progress":
                     self.status.set(_safe_output(value))
+                    self._sync_dashboard()
+                    continue
+                if event == 'schedule':
+                    self._schedule_query_running = False
+                    self._schedule_data = value
+                    self._show_schedule()
                     continue
                 self.busy = False
                 self.progress.stop()
+                self.progress.configure(value=0)
+                self.progress.grid_remove()
                 for button in self.buttons:
                     button.configure(state="normal")
                 if event == "error":
@@ -314,6 +243,7 @@ class WallpaperApp:
                     finish(value)
                 else:
                     self.status.set(str(value or "Done."))
+                self._show_schedule()
                 self._update_cache_status()
         except queue.Empty:
             pass
@@ -377,6 +307,7 @@ class WallpaperApp:
                 return action(source)
 
     def _sign_in(self) -> None:
+        browser_name = 'Edge' if self.config.browser_channel == 'msedge' else 'Chrome'
         def work():
             config = load_config(self.config_path)
             with file_lock(config.profile_dir.parent / "operation.lock"):
@@ -384,20 +315,66 @@ class WallpaperApp:
             return None
 
         def verified(_result):
-            # _poll has cleared the completed login's busy state before invoking
-            # this callback. Album loading starts its own worker and busy state.
-            self._load_albums()
+            self.status.set('Google sign-in saved. Choose albums to change your selection.')
 
         self._start(
-            "Sign in in the dedicated Google browser window. When your Google Photos library appears, "
-            "CLOSE that browser window. This app will then verify sign-in and load your albums.",
+            f"Sign in in {browser_name}. When your Photos library appears, close that browser window to finish connecting.",
             work, verified)
+
+    def _check_sign_in(self) -> None:
+        def work():
+            try:
+                self._with_source(lambda source: None)
+                return "Google sign-in verified. Hourly downloads can use this session."
+            except (SourceError, CacheError) as error:
+                return str(error)
+        self._start("Checking Google sign-in…", work)
+
+    def _watch_status(self) -> None:
+        if not self._closing:
+            self._update_cache_status()
+            self._schedule_poll_count += 1
+            if self._schedule_poll_count % 6 == 0:
+                self._query_schedule()
+            self.root.after(5000, self._watch_status)
+
+    def _query_schedule(self) -> None:
+        if self._closing or self._schedule_query_running:
+            return
+        self._schedule_query_running = True
+        def work():
+            self.events.put(('schedule', read_schedule(self.config_path), None))
+        threading.Thread(target=work, name='download-schedule-status', daemon=True).start()
+
+    def _show_schedule(self) -> None:
+        state = self._schedule_data.get('state')
+        self.schedule_status.set(schedule_text(self._schedule_data))
+        self.schedule_button.configure(
+            text='Pause hourly downloads' if state == 'on' else 'Enable hourly downloads',
+            state='normal' if not self.busy and state in ('on', 'off') else 'disabled')
+        self._sync_dashboard()
+
+    def _toggle_schedule(self) -> None:
+        state = self._schedule_data.get('state')
+        if state not in ('on', 'off'):
+            self._query_schedule()
+            return
+        if state == 'off' and self.dirty and not self._save():
+            return
+        mode = 'Off' if state == 'on' else 'On'
+        def finish(message):
+            self.status.set(message)
+            self._query_schedule()
+        self._start('Updating hourly photo downloads…', lambda: self._run_process(
+            task_command(self.config_path, mode),
+            'Hourly downloads are off; an active batch can finish.' if mode == 'Off'
+            else 'Hourly downloads are on. The next run is shown above.'), finish)
 
     def _load_albums(self) -> None:
         def finish(albums):
             saved_urls = { _album_id(url): url for url in self.config.albums }
             selected = set(self.selected_ids)
-            self.album_tree.delete(*self.album_tree.get_children())
+            self.album_tree.delete(*self.album_rows)
             self.album_rows.clear()
             for album in sorted(albums, key=lambda item: item.title.casefold()):
                 row = {"id": album.id, "url": album.url, "title": album.title, "count": album.item_count}
@@ -410,6 +387,8 @@ class WallpaperApp:
                     self._add_album_row({"id": album_id, "url": url, "title": "Previously selected album (not listed)",
                                          "count": "—"}, True)
             self.loaded_albums = True
+            if hasattr(self, 'album_search'):
+                self.album_search.set('')
             self._update_selection()
             self.status.set("Click an album to include or exclude it, then save your selection.")
         self._start("Loading your private albums…", lambda: self._with_source(lambda source: source.list_albums()), finish)
@@ -456,8 +435,6 @@ class WallpaperApp:
         try:
             current = load_config(self.config_path)
             selected = [row["url"] for row in self.album_rows.values() if row["id"] in self.selected_ids] if self.loaded_albums else list(current.albums)
-            if not selected:
-                raise ConfigError("Load your albums and select at least one before saving.")
             try:
                 batch, count, mib = int(self.batch_size.get()), int(self.max_photos.get()), int(self.cache_mib.get())
                 width, height = [int(value.strip()) for value in self.resolution.get().split("×")]
@@ -495,6 +472,7 @@ class WallpaperApp:
             for line in process.stdout:
                 safe = _safe_output(line.strip())
                 if safe:
+                    append_app_log(self.config_path, safe)
                     last_lines = (last_lines + [safe])[-5:]
                     self.events.put(("progress", safe, None))
             result = process.wait()
@@ -531,9 +509,36 @@ class WallpaperApp:
     def _apply_wallpaper(self) -> None:
         if not self._save_wallpaper_settings():
             return
+        enabled = self.config.windows_wallpaper
         self._start("Generating wallpapers from local photos; this can take a few minutes…", lambda: self._run_process(
-            self._command("--config", str(self.config_path), "wallpapers", "--enable"),
-            "Wallpaper settings applied. Both monitors will change together."))
+            self._command("--config", str(self.config_path), "wallpapers", *(['--enable'] if enabled else [])),
+            "Wallpaper settings applied. Both monitors will change together." if enabled
+            else 'Wallpaper images generated. Desktop wallpaper changes remain off.'))
+
+    def _toggle_wallpaper(self) -> None:
+        if self.busy:
+            return
+        enabled = load_config(self.config_path).windows_wallpaper
+        self._start('Turning wallpaper off…' if enabled else 'Preparing and turning wallpaper on…',
+            lambda: self._run_process(
+                self._command('--config', str(self.config_path), 'wallpapers', '--disable' if enabled else '--enable'),
+                'Wallpaper is off. Photo downloading continues; the current desktop image stays in place.' if enabled
+                else 'Wallpaper is on. Both monitors will change together.'))
+
+    def _show_wallpaper_mode(self) -> None:
+        try:
+            self.config = load_config(self.config_path)
+        except (OSError, ConfigError):
+            return
+        enabled = self.config.windows_wallpaper
+        self.wallpaper_feature_status.set('Your desktop changes automatically. Both screens show the same image.' if enabled
+            else 'Download-only mode. Photos keep downloading; your desktop stays as it is.')
+        if hasattr(self, 'wallpaper_badge'):
+            self.wallpaper_badge.configure(text='ON' if enabled else 'OFF',
+                background='#e3f3ec' if enabled else '#eef2f7', foreground='#16835d' if enabled else '#596b80')
+        self.wallpaper_toggle_button.configure(text='Turn wallpaper off' if enabled else 'Turn wallpaper on',
+                                              state='disabled' if self.busy else 'normal')
+        self.wallpaper_refresh_button.configure(state='normal' if enabled and not self.busy else 'disabled')
 
     def _refresh_wallpaper(self) -> None:
         if self.busy:
@@ -541,7 +546,7 @@ class WallpaperApp:
             return
         def work():
             if not load_config(self.config_path).windows_wallpaper:
-                raise CacheError("Apply wallpaper settings first to prepare and enable your wallpaper set.")
+                raise CacheError("Wallpaper is off. Use Turn wallpaper on from the dashboard to enable desktop changes.")
             return self._run_process(
                 self._command("--config", str(self.config_path), "wallpaper-next"),
                 "Wallpaper refreshed on both monitors.")
@@ -559,20 +564,11 @@ class WallpaperApp:
         if self.dirty and not self._save():
             return
         if not self.config.albums:
-            messagebox.showinfo("Choose albums", "Sign in, load your albums, and save a selection first.", parent=self.root)
+            messagebox.showinfo("Choose albums", "Sign in, then use Choose albums to save a selection first.", parent=self.root)
             return
         self._start("Preparing fresh wallpapers…", lambda: self._run_process(
             self._command("--config", str(self.config_path), "refresh"),
             "Photo download finished. Your local collection is ready."))
-
-    def _enable_schedule(self) -> None:
-        if self.dirty and not self._save():
-            return
-        script = PROJECT_ROOT / "scripts" / "Install-Task.ps1"
-        self._start("Setting up hourly refreshes…", lambda: self._run_process(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script),
-             "-ConfigPath", str(self.config_path)],
-            "Hourly photo downloads are enabled while you are signed in to Windows."))
 
     def _open_folder(self) -> None:
         folder = self.config.cache_dir / "photos"
@@ -585,15 +581,54 @@ class WallpaperApp:
             messagebox.showerror("Could not open folder", "Open the displayed wallpaper folder in File Explorer.", parent=self.root)
 
     def _update_cache_status(self) -> None:
+        self._show_wallpaper_mode()
+        self.connection_status.set(connection_text(read_connection(self.config.profile_dir)))
         try:
             state = json.loads((self.config.cache_dir / "state.json").read_text(encoding="utf-8"))
+            self._dashboard_state = state
             items = state.get("items", {})
             size = sum(item.get("bytes", 0) for item in items.values()) / (1024 * 1024)
-            last = state.get("last_success")
-            stamp = datetime.fromisoformat(last).astimezone().strftime("%b %d, %I:%M %p") if last else "not yet"
-            self.cache_status.set(f"{len(items)} downloaded photos · {size:.1f} MiB · Last completed download: {stamp}")
+            stamp = latest_download(state)
+            self.cache_status.set(f"{len(items)} downloaded photos · {size:.1f} MiB\nLatest photo download: {stamp}")
+            self._update_download_status(state)
         except (OSError, ValueError, TypeError, AttributeError):
+            self._dashboard_state = {}
+            self._dashboard_downloading = False
             self.cache_status.set("No photos have been downloaded yet.")
+        self._sync_dashboard()
+
+    def _update_download_status(self, state: dict) -> None:
+        activity = state.get('download_activity', {})
+        active = False
+        if activity.get('phase') in ACTIVE_PHASES:
+            lock = self.config.cache_dir.parent / f'.{self.config.cache_dir.name}.lock'
+            if lock.is_file():
+                try:
+                    with file_lock(lock):
+                        pass
+                except CacheError:
+                    active = True
+        text = activity_text(state, active)
+        self._dashboard_downloading = active
+        cache = Cache(self.config)
+        cache.state = state
+        quota = cache.quota_status()
+        if quota.next_allowed_at:
+            text += f'\nHourly allowance resets: {local_date(quota.next_allowed_at)}'
+        self.download_status.set(_safe_output(text))
+        if active:
+            self.progress.grid()
+            self.progress.stop()
+            total = activity.get('total', 0)
+            if activity.get('phase') == 'downloading' and total:
+                self.progress.configure(mode='determinate', maximum=total, value=activity.get('completed', 0))
+            else:
+                self.progress.configure(mode='indeterminate')
+                self.progress.start(12)
+        elif not self.busy:
+            self.progress.stop()
+            self.progress.configure(value=0)
+            self.progress.grid_remove()
 
     def _close(self) -> None:
         if self.busy:

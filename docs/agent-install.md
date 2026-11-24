@@ -49,10 +49,10 @@ configuration, session profile, or photo cache onto the new machine.
 
 ## 3. User-assisted account and album selection
 
-Launch `Start-App.cmd`. On **Photo downloader**, the user clicks **Sign in to
+Launch `Start-App.cmd`. On the dashboard, the user clicks **Sign in to
 Google** and signs in directly in the separate installed browser. They close
-that browser window after Photos appears, then **Load my albums**, select their
-albums, and **Save downloader settings**. Never ask them to paste credentials,
+that browser window after Photos appears, then **Choose albums**, select their
+albums, and **Save selection**. Never ask them to paste credentials,
 cookies, or MFA codes into chat. Stop login automation at any challenge.
 
 Defaults put private data under `%LOCALAPPDATA%\GooglePhotosWallpaper`. If the
@@ -61,7 +61,7 @@ Keep the browser profile separate from the photo cache. Do not enable sharing.
 
 ## 4. Prepare a bounded collection and schedule downloads
 
-The user can click **Download photos now**, or run this once after album selection:
+The user can click **Download now**, or run this once after album selection:
 
 ```powershell
 .\.venv\Scripts\python.exe -m photo_cache refresh
@@ -77,8 +77,8 @@ The local status preflight does not verify current Google authentication.
 
 ## 5. Choose standalone wallpaper or an external tool
 
-For standalone mode, use **Wallpaper**, choose photos per collage and change
-interval, then **Apply settings & generate**. Defaults are 20 photos and ten
+For standalone mode, use **Settings** on the Desktop wallpaper card, choose
+photos per collage and the change interval, save, then **Turn wallpaper on**. Defaults are 20 photos and ten
 minutes. This applies the same complete picture to every monitor and installs
 the independent rotation task. Pause competing wallpaper tools first.
 

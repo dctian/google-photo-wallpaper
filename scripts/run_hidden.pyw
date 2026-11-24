@@ -10,29 +10,9 @@ from datetime import datetime, timezone
 if not getattr(sys, 'frozen', False):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from photo_cache.runtime import frozen, application_dir, command as app_command
+from photo_cache.logs import BoundedLog, LOG_LIMIT
 
 PROJECT_ROOT = application_dir()
-LOG_LIMIT = 1024 * 1024
-
-
-class BoundedLog:
-    """Keep at most two 1 MiB files, including during a running refresh."""
-
-    def __init__(self, path: Path):
-        self.path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-    def write(self, data: bytes) -> None:
-        # Chunking also bounds a single unusually large child write.
-        for offset in range(0, len(data), 8192):
-            chunk = data[offset : offset + 8192]
-            size = self.path.stat().st_size if self.path.exists() else 0
-            if size + len(chunk) > LOG_LIMIT:
-                os.replace(self.path, self.path.with_suffix('.log.1'))
-            with self.path.open('ab') as stream:
-                stream.write(chunk)
-
-
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     rotation = len(argv) == 3 and argv[2] == '--wallpaper-next'
