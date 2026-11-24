@@ -199,11 +199,12 @@ def main(argv=None) -> int:
                     return 0
                 cache.state["last_attempt"] = now()
                 cache.state["last_error"] = None
-                cache.save()
+                cache.activity('connecting', total=0, completed=0, added=0, skipped=0, failed=0)
                 try:
                     with GooglePhotosSource(config.profile_dir, max_width=config.max_width,
                                             max_height=config.max_height, browser_channel=config.browser_channel) as source:
                         print("Reading selected albums...", flush=True)
+                        cache.activity('reading_albums')
                         photos = source.list_photos(list(config.albums))
                         limit = min(config.batch_size, cache.quota_status().remaining, 50)
                         print(f"Found {len(photos)} still photos. Trying up to {limit} photos within the shared hourly allowance...", flush=True)
@@ -227,8 +228,8 @@ def main(argv=None) -> int:
                     cache.state["last_error"] = (str(exc) if isinstance(exc, (CacheError, SourceError))
                                                  else f"Refresh failed ({type(exc).__name__}). Check setup, disk space, and write access.")
                     try:
-                        cache.save()
-                    except OSError:
+                        cache.activity('error')
+                    except (OSError, CacheError):
                         pass
                     _refresh_wallpapers(config)
                     raise
