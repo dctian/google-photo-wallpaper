@@ -17,6 +17,35 @@ from photo_cache.source import LoginRequired, RemotePhoto, _PROFILE_MARKER
 
 
 class StatusTests(unittest.TestCase):
+    def test_disabling_wallpaper_preserves_downloader_and_never_generates_or_applies(self):
+        data = json.loads(self.config_path.read_text())
+        data['windows_wallpaper'] = True
+        self.config_path.write_text(json.dumps(data))
+        with patch('photo_cache.__main__.subprocess.run') as task, \
+                patch('photo_cache.wallpapers.generate_wallpapers') as generate, \
+                patch('photo_cache.wallpapers.rotate_wallpaper') as rotate, \
+                patch('photo_cache.__main__.GooglePhotosSource') as source, \
+                contextlib.redirect_stdout(io.StringIO()):
+            task.return_value.returncode = 0
+            task.return_value.stdout = 'Wallpaper off'
+            self.assertEqual(main(['--config', str(self.config_path), 'wallpapers', '--disable']), 0)
+            self.assertEqual(main(['--config', str(self.config_path), 'wallpaper-next']), 0)
+            from photo_cache.__main__ import _refresh_wallpapers
+            _refresh_wallpapers(load_config(self.config_path))
+        self.assertEqual(json.loads(self.config_path.read_text()), data | {'windows_wallpaper': False})
+        generate.assert_not_called()
+        rotate.assert_not_called()
+        source.assert_not_called()
+        self.assertEqual(task.call_args.args[0][-2:], ['-Mode', 'Off'])
+        self.assertIn('Install-WallpaperTask.ps1', task.call_args.args[0][-5])
+
+    def test_wallpaper_stays_disabled_even_if_task_cannot_be_paused(self):
+        with patch('photo_cache.__main__.subprocess.run') as task, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            task.return_value.returncode = 1
+            self.assertEqual(main(['--config', str(self.config_path), 'wallpapers', '--disable']), 1)
+        self.assertFalse(load_config(self.config_path).windows_wallpaper)
+
     def test_failed_batch_is_a_failure_even_when_quota_is_exhausted(self):
         with patch('photo_cache.__main__.GooglePhotosSource') as source, contextlib.redirect_stdout(io.StringIO()):
             remote = source.return_value.__enter__.return_value

@@ -112,7 +112,9 @@ def main(argv=None) -> int:
     commands.add_parser("refresh", help="Download one new batch")
     commands.add_parser("wallpaper-next", help="Apply the next local collage to all monitors")
     wallpaper_parser = commands.add_parser("wallpapers", help="Generate wallpapers from local photos")
-    wallpaper_parser.add_argument("--enable", action="store_true", help="Enable synchronized wallpaper rotation on all monitors")
+    wallpaper_mode = wallpaper_parser.add_mutually_exclusive_group()
+    wallpaper_mode.add_argument("--enable", action="store_true", help="Enable synchronized wallpaper rotation on all monitors")
+    wallpaper_mode.add_argument("--disable", action="store_true", help="Stop wallpaper changes while keeping photo downloads enabled")
     status_parser = commands.add_parser("status", help="Show local cache status")
     status_checks = status_parser.add_mutually_exclusive_group()
     status_checks.add_argument("--require-ready", action="store_true")
@@ -140,7 +142,11 @@ def main(argv=None) -> int:
             from .windows_wallpaper import WallpaperError
             try:
                 with file_lock(cache_lock_path(config)):
-                    rotate_wallpaper(config)
+                    current = load_config(config_path)
+                    if not current.windows_wallpaper:
+                        print('Wallpaper changes are off. Photo downloading is unchanged.')
+                        return 0
+                    rotate_wallpaper(current)
                 return 0
             except WallpaperError as exc:
                 print(str(exc), file=sys.stderr)
@@ -150,20 +156,23 @@ def main(argv=None) -> int:
             from .windows_wallpaper import WallpaperError
             try:
                 with file_lock(config.profile_dir.parent / "operation.lock"), file_lock(cache_lock_path(config)):
-                    generate_wallpapers(config, apply=args.enable)
-                    if args.enable:
+                    if not args.disable:
+                        generate_wallpapers(config, apply=args.enable)
+                    if args.enable or args.disable:
                         from .gui import _write_config
                         data = json.loads(config_path.read_text(encoding="utf-8-sig"))
-                        data["windows_wallpaper"] = True
+                        data["windows_wallpaper"] = args.enable
                         _write_config(config_path, data)
-                if args.enable:
+                if args.enable or args.disable:
                     script = resource_dir() / "scripts" / "Install-WallpaperTask.ps1"
                     task = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                        "-File", str(script), "-ConfigPath", str(config_path)],
+                        "-File", str(script), "-ConfigPath", str(config_path),
+                        '-Mode', 'Off' if args.disable else 'Install'],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                         creationflags=subprocess.CREATE_NO_WINDOW)
                     if task.returncode:
-                        print("Wallpaper applied, but automatic rotation could not be installed. Run scripts/Install-WallpaperTask.ps1.", file=sys.stderr)
+                        print('Wallpaper changes are off in the configuration, but the rotation task could not be paused.'
+                              if args.disable else "Wallpaper applied, but automatic rotation could not be installed. Run scripts/Install-WallpaperTask.ps1.", file=sys.stderr)
                         return 1
                     print(task.stdout.strip())
                 return 0
@@ -171,6 +180,8 @@ def main(argv=None) -> int:
                 print(str(exc), file=sys.stderr)
                 return 1
         with file_lock(config.profile_dir.parent / "operation.lock"):
+            # A toggle may have completed after this process read the config.
+            config = load_config(config_path)
             if args.command == "login":
                 print("Sign in to Google in the separate Chrome window. Once your Photos library appears, close that browser window to let the app verify the saved session.", flush=True)
                 login(config.profile_dir, browser_channel=config.browser_channel)
