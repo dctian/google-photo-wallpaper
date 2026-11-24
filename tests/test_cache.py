@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+import contextlib
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +22,16 @@ def jpeg(color="red", size=(100, 80)):
 
 
 class CacheTests(unittest.TestCase):
+    def test_permanent_windows_lock_stops_after_bounded_retries_with_error_code(self):
+        blocked = PermissionError('Do not expose arbitrary exception detail')
+        blocked.winerror = 32
+        with patch('photo_cache.cache.os.replace', side_effect=blocked) as rename, \
+                patch('photo_cache.cache.time.sleep'), contextlib.redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(CacheError, 'Windows error 32') as error:
+            self.cache.activity('downloading')
+        self.assertEqual(rename.call_count, 6)
+        self.assertNotIn('arbitrary exception', str(error.exception))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -48,6 +59,36 @@ class CacheTests(unittest.TestCase):
         self.assertTrue(first_keys <= set(self.cache.state["history"]))
         self.assertEqual(len(list(self.cache.photos.glob("*.jpg"))), 3)
         self.assertLessEqual(second.bytes, self.config.max_bytes)
+
+    def test_last_download_is_retained_when_later_batch_is_interrupted(self):
+        calls = 0
+        def fetch(*_):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise KeyboardInterrupt()
+            return jpeg()
+        with self.assertRaises(KeyboardInterrupt):
+            self.refresh('a', 'b', fetch=fetch)
+        saved = json.loads((self.config.cache_dir / 'state.json').read_text())
+        self.assertTrue(saved['last_download_at'])
+        self.assertIsNone(saved['last_success'])
+        self.assertEqual(len(saved['items']), 1)
+
+    def test_live_progress_and_final_counts_include_failed_attempts(self):
+        seen = []
+        def fetch(*_):
+            saved = json.loads(self.cache.state_file.read_text())
+            seen.append(saved['download_activity'].copy())
+            if len(seen) == 1:
+                raise CacheError('Offline')
+            return jpeg()
+        result = self.refresh('a', 'b', fetch=fetch)
+        self.assertEqual((result.downloaded, result.failed), (1, 1))
+        self.assertEqual((seen[0]['current'], seen[0]['completed']), (1, 0))
+        self.assertEqual((seen[1]['current'], seen[1]['completed'], seen[1]['failed']), (2, 1, 1))
+        final = json.loads(self.cache.state_file.read_text())['download_activity']
+        self.assertEqual((final['phase'], final['completed'], final['added'], final['failed']), ('finished', 2, 1, 1))
 
     def test_batch_larger_than_cache_does_not_evict_its_own_downloads(self):
         self.cache.config = replace(self.config, max_photos=2, batch_size=10)
@@ -123,11 +164,8 @@ class CacheTests(unittest.TestCase):
         self.refresh("a", "b")
         before = set(self.cache.photos.iterdir())
         real_save = self.cache.save
-        count = 0
         def fail_new_state():
-            nonlocal count
-            count += 1
-            if count > 1:
+            if any(self.cache.photos / f'{key}.jpg' not in before for key in self.cache.state['items']):
                 raise OSError("disk failure")
             real_save()
         with patch.object(self.cache, "save", side_effect=fail_new_state):

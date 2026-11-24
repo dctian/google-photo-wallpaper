@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from .hosts import is_google_photos_image_host
+from .connection_status import record_connection
 
 
 class SourceError(RuntimeError):
@@ -244,20 +245,29 @@ class GooglePhotosSource:
         self._globals = None
 
     def __enter__(self):
-        self._open(headless=True)
         try:
+            self._open(headless=True)
             page = self._context.pages[0] if self._context.pages else self._context.new_page()
             page.goto(self._home_url, wait_until="domcontentloaded", timeout=45000)
             self._globals = self._read_auth(page)
+            record_connection(self.profile_dir, 'signed_in')
             return self
+        except LoginRequired:
+            record_connection(self.profile_dir, 'sign_in_required')
+            self.close()
+            raise
         except SourceError:
+            record_connection(self.profile_dir, 'check_failed')
             self.close()
             raise
         except Exception:
+            record_connection(self.profile_dir, 'check_failed')
             self.close()
             raise SourceError("The photo browser could not connect. Try again or run login.") from None
 
-    def __exit__(self, *_):
+    def __exit__(self, error_type, error, traceback):
+        if isinstance(error, LoginRequired):
+            record_connection(self.profile_dir, 'sign_in_required')
         self.close()
 
     @property

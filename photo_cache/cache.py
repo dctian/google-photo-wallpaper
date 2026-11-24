@@ -278,6 +278,8 @@ class Cache:
 
     def deferred_result(self, report: Callable[[str], None] = print) -> RefreshResult:
         quota = self._update_quota_snapshot()
+        self.state['download_activity'] = {**self.state.get('download_activity', {}),
+                                           'phase': 'waiting', 'updated_at': now()}
         self.save()
         if quota.next_allowed_at is not None:
             when = datetime.fromtimestamp(quota.next_allowed_at, timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -323,6 +325,16 @@ class Cache:
                 if attempt == 0:
                     print(f'Cache state file temporarily in use (Windows error {code}); retrying.', flush=True)
                 time.sleep(delays[attempt])
+
+    def activity(self, phase: str, **counts) -> None:
+        previous = self.state.get('download_activity', {})
+        self.state['download_activity'] = {**previous, **counts, 'phase': phase, 'updated_at': now()}
+        try:
+            self.save()
+        except OSError as error:
+            windows_code = getattr(error, 'winerror', None)
+            detail = f'Windows error {windows_code}' if windows_code is not None else f'OS error {error.errno}'
+            raise CacheError(f'Could not save download progress ({detail}). Existing photos were retained.') from None
 
     def size(self) -> int:
         return sum(item["bytes"] for item in self.state["items"].values())
@@ -372,12 +384,14 @@ class Cache:
         published = set()
         # Failed and filtered photos consume the same per-run and hourly budget.
         attempt_limit = min(len(pending), batch_limit, self.quota_status().remaining)
+        self.activity('downloading', total=attempt_limit, completed=0, added=0, skipped=0, failed=0)
         for key, photo in pending[:attempt_limit]:
             if downloaded >= target:
                 break
             if not self._reserve_download(key):
                 break
             attempted += 1
+            self.activity('downloading', current=attempted)
             try:
                 raw = fetch(photo, config)
                 if len(raw) > config.max_download_bytes:
@@ -388,16 +402,19 @@ class Cache:
                     if analysis.get("low_quality"):
                         curated_out += 1
                         self.state["attempts"][key] = time.time()
+                        self.activity('downloading', completed=attempted, skipped=curated_out)
                         continue
                     duplicates = [item for other, item in items.items() if other != key and item.get("analysis")]
                     if any(near_duplicate(analysis, item["analysis"]) for item in duplicates):
                         curated_out += 1
                         self.state["attempts"][key] = time.time()
+                        self.activity('downloading', completed=attempted, skipped=curated_out)
                         continue
             except (CacheError, OSError):
                 failed += 1
                 self.state["attempts"][key] = time.time()
                 report("Skipped one photo after a download or image validation failure.")
+                self.activity('downloading', completed=attempted, failed=failed)
                 continue
             stage = self.root / "pending.jpg"
             safe_path(stage)
@@ -430,6 +447,7 @@ class Cache:
                 self.state = copy.deepcopy(self.state)
                 self.state["items"][key] = {"bytes": len(content), "version": str(photo.version), "selected": selected, "analysis": analysis}
                 self.state["history"][key] = selected
+                self.state["last_download_at"] = now()
                 self.state["attempts"].pop(key, None)
                 for victim in removals:
                     del self.state["items"][victim]
@@ -446,6 +464,7 @@ class Cache:
                     safe_path(victim_path)
                     victim_path.unlink(missing_ok=True)
                 downloaded += 1
+                self.activity('downloading', completed=attempted, added=downloaded)
                 published.add(key)
                 if downloaded == 1 or downloaded % 25 == 0 or downloaded == target:
                     report(f"Downloaded {downloaded}/{target} wallpapers.")
@@ -453,6 +472,7 @@ class Cache:
                 if stage.exists():
                     stage.unlink()
         quota = self._update_quota_snapshot()
+        self.activity('finished', completed=attempted, added=downloaded, skipped=curated_out, failed=failed)
         self.state["curated_out"] = curated_out
         if curated_out:
             report(f"Skipped {curated_out} nearly blank or near-duplicate photos.")

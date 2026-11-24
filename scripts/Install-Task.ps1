@@ -4,7 +4,9 @@ param(
     [ValidatePattern('^[^\\/\r\n]{1,128}$')]
     [string]$TaskName = 'GooglePhotosWallpaperRefresh',
     [ValidateRange(1, 24)]
-    [int]$IntervalHours = 1
+    [int]$IntervalHours = 1,
+    [ValidateSet('Install', 'Status', 'On', 'Off')]
+    [string]$Mode = 'Install'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +17,39 @@ $projectRoot = $runtime.Root
 $pythonPath = $runtime.Console
 $pythonWindowlessPath = $runtime.Windowless
 $launcherPath = Join-Path $PSScriptRoot 'run_hidden.pyw'
+
+$resolvedConfig = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ConfigPath)
+$description = 'Google Photos wallpaper cache: ' + $resolvedConfig
+$existingTask = Get-ScheduledTask -TaskName $TaskName -TaskPath '\' -ErrorAction SilentlyContinue
+if ($Mode -eq 'Status') {
+    if (-not $existingTask) { @{ state = 'off'; next_run = $null } | ConvertTo-Json -Compress; return }
+    if ($existingTask.Description -ne $description) {
+        @{ state = 'other_config'; next_run = $null } | ConvertTo-Json -Compress; return
+    }
+    $info = $existingTask | Get-ScheduledTaskInfo
+    $enabled = $existingTask.Settings.Enabled -and $existingTask.State -ne 'Disabled'
+    $next = if ($enabled -and $info.NextRunTime.Year -gt 2000) { $info.NextRunTime.ToUniversalTime().ToString('o') } else { $null }
+    @{ state = $(if ($enabled) { 'on' } else { 'off' }); next_run = $next;
+       running = ($existingTask.State -eq 'Running'); last_result = $info.LastTaskResult } | ConvertTo-Json -Compress
+    return
+}
+if ($existingTask -and $existingTask.Description -ne $description) {
+    throw 'A task with this name belongs to another configuration. Choose a different -TaskName.'
+}
+if ($Mode -eq 'Off') {
+    if ($existingTask -and $PSCmdlet.ShouldProcess($TaskName, 'Turn off hourly photo downloads')) {
+        Disable-ScheduledTask -InputObject $existingTask | Out-Null
+    }
+    Write-Output 'Hourly downloads are off. An already-running batch can finish; manual downloads still work.'
+    return
+}
+if ($Mode -eq 'On' -and $existingTask) {
+    if ($PSCmdlet.ShouldProcess($TaskName, 'Turn on hourly photo downloads')) {
+        Enable-ScheduledTask -InputObject $existingTask | Out-Null
+    }
+    Write-Output 'Hourly downloads are on. The existing schedule was preserved.'
+    return
+}
 
 foreach ($requiredFile in @($pythonPath, $pythonWindowlessPath, $launcherPath, $ConfigPath)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {

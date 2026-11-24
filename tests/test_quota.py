@@ -100,11 +100,8 @@ class QuotaTests(unittest.TestCase):
 
     def test_reservation_failure_prevents_network(self):
         real_save = self.cache.save
-        calls = 0
         def fail_reservation():
-            nonlocal calls
-            calls += 1
-            if calls == 2:
+            if self.cache.state.get('download_attempts'):
                 raise OSError("disk unavailable")
             real_save()
         with patch.object(self.cache, "save", side_effect=fail_reservation), self.assertRaisesRegex(CacheError, "reserve"):
