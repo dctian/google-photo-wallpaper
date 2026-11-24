@@ -1,11 +1,26 @@
 [CmdletBinding(SupportsShouldProcess)]
-param([string]$ConfigPath = '')
+param(
+    [string]$ConfigPath = '',
+    [ValidateSet('Install', 'Off')]
+    [string]$Mode = 'Install'
+)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'App-Runtime.ps1')
 $runtime = Get-AppRuntime
 if (-not $ConfigPath) { $ConfigPath = $runtime.Config }
 $projectRoot = $runtime.Root
 $resolvedConfig = (Resolve-Path -LiteralPath $ConfigPath).Path
+$taskName = 'GooglePhotosWallpaperRotation'
+$description = 'Synchronized local photo wallpaper rotation: ' + $resolvedConfig
+$existing = Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue
+if ($existing -and $existing.Description -ne $description) { throw 'The wallpaper rotation task belongs to another configuration.' }
+if ($Mode -eq 'Off') {
+    if ($existing -and $PSCmdlet.ShouldProcess($taskName, 'Turn off wallpaper rotation')) {
+        Disable-ScheduledTask -InputObject $existing | Out-Null
+    }
+    Write-Output 'Automatic wallpaper changes are off. Photo downloading is unchanged.'
+    return
+}
 $launcher = Join-Path $PSScriptRoot 'run_hidden.pyw'
 $python = $runtime.Windowless
 foreach ($path in @($resolvedConfig, $launcher, $python)) {
@@ -18,10 +33,6 @@ $interval = 10
 if ($null -ne $configData.wallpaper_interval_minutes) { $interval = $configData.wallpaper_interval_minutes }
 if ($interval -isnot [int] -and $interval -isnot [long]) { throw 'The wallpaper interval must be a whole number.' }
 if ($interval -lt 1 -or $interval -gt 1440) { throw 'Invalid wallpaper interval.' }
-$taskName = 'GooglePhotosWallpaperRotation'
-$description = 'Synchronized local photo wallpaper rotation: ' + $resolvedConfig
-$existing = Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue
-if ($existing -and $existing.Description -ne $description) { throw 'The wallpaper rotation task belongs to another configuration.' }
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Limited
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes($interval) -RepetitionInterval (New-TimeSpan -Minutes $interval)
