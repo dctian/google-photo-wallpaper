@@ -307,7 +307,22 @@ class Cache:
             json.dump(self.state, handle, separators=(",", ":"), allow_nan=False)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp, self.state_file)
+        # On Windows, even a brief read of state.json can deny replacement.
+        # Keep the same durable state/quota reservation and retry the rename.
+        delays = (0.025, 0.05, 0.1, 0.2, 0.4)
+        for attempt in range(len(delays) + 1):
+            try:
+                os.replace(temp, self.state_file)
+                if attempt:
+                    print(f'Cache state saved after {attempt} file-lock retries.', flush=True)
+                break
+            except OSError as error:
+                code = getattr(error, 'winerror', None)
+                if code not in (5, 32, 33) or attempt == len(delays):
+                    raise
+                if attempt == 0:
+                    print(f'Cache state file temporarily in use (Windows error {code}); retrying.', flush=True)
+                time.sleep(delays[attempt])
 
     def size(self) -> int:
         return sum(item["bytes"] for item in self.state["items"].values())
